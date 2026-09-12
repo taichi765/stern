@@ -10,3 +10,8 @@ thiserror = "2.0.18"
 futures-util = "0.3"
 tracing = "0.1"
 derive_more = "2.1.1"
+parking_lot = "0.12.5"
+strum = "0.28.0"
+tokio = "1.52.3"
+
+slint = { git = "https://github.com/taichi765/slint" }

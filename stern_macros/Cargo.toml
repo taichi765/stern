@@ -16,5 +16,5 @@ proc-macro2 = "1.0"
 
 [dev-dependencies]
 trybuild = "1.0"
-slint = { git = "https://github.com/taichi765/slint" }
+slint = { workspace = true }
 stern = { path = "../stern" }
