@@ -13,11 +13,7 @@ pub struct WorkerThread<C> {
     cx: Arc<RwLock<C>>,
 }
 
-// TODO: 停止できるようにする
-impl<C> WorkerThread<C>
-where
-    C: Sync + Send + 'static,
-{
+impl<C> WorkerThread<C> {
     pub fn new(cx: C) -> Self {
         let (tx, rx) = mpsc::channel(WORKER_CHANNEL_BUF);
         let _join = std::thread::Builder::new()
@@ -26,14 +22,6 @@ where
         Self {
             tx,
             cx: Arc::new(RwLock::new(cx)),
-        }
-    }
-
-    #[tokio::main]
-    async fn run(mut rx: mpsc::Receiver<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>) {
-        loop {
-            let fut = rx.recv().await.unwrap();
-            let _join = tokio::spawn(fut);
         }
     }
 
@@ -49,6 +37,20 @@ where
         self.tx.blocking_send(Box::pin(fut)).unwrap();
     }
 
+    #[tokio::main]
+    async fn run(mut rx: mpsc::Receiver<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>) {
+        loop {
+            let fut = rx.recv().await.unwrap();
+            let _join = tokio::spawn(fut);
+        }
+    }
+}
+
+// TODO: 停止できるようにする
+impl<C> WorkerThread<C>
+where
+    C: Sync + Send + 'static,
+{
     pub fn spawn_cx<F, Fut>(&self, f: F)
     where
         F: FnOnce(Arc<RwLock<C>>) -> Fut + Send + 'static,
