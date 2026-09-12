@@ -16,5 +16,5 @@ proc-macro2 = "1.0"
 
 [dev-dependencies]
 trybuild = "1.0"
-slint = { workspace = true }
+slint = { git = "https://github.com/taichi765/slint", branch = "feat/add-compiler-config-for-attribute" }
 stern = { path = "../stern" }

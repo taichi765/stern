@@ -9,7 +9,7 @@ edition.workspace = true
 [dependencies]
 stern-macros = { path = "../stern_macros" }
 
-slint = { workspace = true }
+slint = { git = "https://github.com/taichi765/slint", branch = "feat/add-compiler-config-for-attribute" }
 
 thiserror = { workspace = true }
 futures-util = { workspace = true }
