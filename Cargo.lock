@@ -3953,6 +3953,7 @@ dependencies = [
  "derive_more",
  "futures-util",
  "parking_lot",
+ "slint",
  "stern-macros",
  "strum",
  "thiserror 2.0.18",

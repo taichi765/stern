@@ -9,6 +9,8 @@ edition.workspace = true
 [dependencies]
 stern-macros = { path = "../stern_macros" }
 
+slint = { workspace = true }
+
 thiserror = { workspace = true }
 futures-util = { workspace = true }
 tracing = { workspace = true }
