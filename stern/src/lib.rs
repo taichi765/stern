@@ -68,7 +68,9 @@ impl<T> PropertyHandle<T> {
     }
 
     /// Run [`PropertyHandle::bind()`] in the slint event loop using [`slint::spawn_local()`].
-    pub fn bind_detached<S>(self, input_stream: S)
+    ///
+    /// Returns handle to the spawned task.
+    pub fn bind_detached<S>(self, input_stream: S) -> slint::JoinHandle<()>
     where
         S: FusedStream<Item = T> + Unpin + 'static,
         T: 'static,
@@ -76,7 +78,7 @@ impl<T> PropertyHandle<T> {
         slint::spawn_local(async move {
             self.bind(input_stream).await.expect("stream terminated");
         })
-        .unwrap();
+        .unwrap()
     }
 }
 
