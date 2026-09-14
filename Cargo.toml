@@ -4,8 +4,14 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
+version = "0.1.0"
 
 [workspace.dependencies]
+stern = { path = "./stern" }
+stern-macros = { path = "./stern_macros" }
+
+slint = { git = "https://github.com/taichi765/slint", branch = "feat/add-compiler-config-for-attribute" }
+
 thiserror = "2.0.18"
 futures-util = "0.3"
 tracing = "0.1"
@@ -13,3 +19,4 @@ derive_more = "2.1.1"
 parking_lot = "0.12.5"
 strum = "0.28.0"
 tokio = "1.52.3"
+tokio-util = "0.7.19"

@@ -1,10 +1,7 @@
 [package]
 name = "stern-macros"
 edition.workspace = true
-# When including taichi765/stern repository as git submodule, version is inherited from
-# user's workspace, not this repository's workspace.
-# Due to that, we need to sync versions between stern and stern-macros manually.
-version = "0.1.0"
+version.workspace = true
 
 [lib]
 proc-macro = true
@@ -16,5 +13,5 @@ proc-macro2 = "1.0"
 
 [dev-dependencies]
 trybuild = "1.0"
-slint = { git = "https://github.com/taichi765/slint", branch = "feat/add-compiler-config-for-attribute" }
-stern = { path = "../stern" }
+slint = { workspace = true }
+stern = { workspace = true }
