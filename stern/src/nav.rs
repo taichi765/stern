@@ -158,6 +158,8 @@ where
         ))))
     }
 
+    /// Navigates to the specified route. The function needs to be called from the thread running slint event loop, if `route_property_setter`
+    /// passed in [`NavController::new()`] calls any slint function.
     pub fn navigate(&self, route: R) {
         self.0.borrow_mut().navigate(route);
     }
