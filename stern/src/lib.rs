@@ -74,7 +74,7 @@ impl<T> PropertyHandle<T> {
     /// Run [`PropertyHandle::bind()`] in the slint event loop using [`slint::spawn_local()`].
     ///
     /// Returns handle to the spawned task.
-    pub fn bind_detached<S>(self, input_stream: S) -> CancellationToken
+    pub fn bind<S>(self, input_stream: S) -> CancellationToken
     where
         S: FusedStream<Item = T> + Unpin + 'static,
         T: 'static,
