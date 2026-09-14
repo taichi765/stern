@@ -16,5 +16,6 @@ futures-util = { workspace = true }
 tracing = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["sync", "rt-multi-thread", "macros"] }
+tokio-util = { version = "0.7.19" }
 parking_lot = { workspace = true }
 derive_more = { workspace = true, features = ["debug"] }

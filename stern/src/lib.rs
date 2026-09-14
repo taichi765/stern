@@ -1,6 +1,7 @@
 use futures_util::{StreamExt as _, stream::FusedStream};
 use std::{fmt::Debug, rc::Rc};
 use thiserror::Error;
+use tokio_util::sync::CancellationToken;
 
 pub mod nav;
 pub use stern_macros::{adopter, route};
@@ -50,11 +51,14 @@ impl<T> PropertyHandle<T> {
         (self.setter)(val)
     }
 
-    /// Binds `input_stream` to adopter i.e. watches `input_stream` and sets latest value
+    /// Watches `input_stream` and sets latest value
     /// via [`setter`][Self::setter].
     ///
     /// Once property are bound to stream, [`PropertyHandle`] is consumed and cannot be changed manually.
-    pub async fn bind<S>(self, mut input_stream: S) -> Result<(), StreamTerminated>
+    ///
+    /// Note that if `setter` configured in [`PropertyHandle::new()`] calls any slint function, this function
+    /// can't be called from the thread not running slint event loop.
+    pub async fn watch<S>(self, mut input_stream: S) -> Result<(), StreamTerminated>
     where
         S: FusedStream<Item = T> + Unpin,
     {
@@ -70,15 +74,25 @@ impl<T> PropertyHandle<T> {
     /// Run [`PropertyHandle::bind()`] in the slint event loop using [`slint::spawn_local()`].
     ///
     /// Returns handle to the spawned task.
-    pub fn bind_detached<S>(self, input_stream: S) -> slint::JoinHandle<()>
+    pub fn bind_detached<S>(self, input_stream: S) -> CancellationToken
     where
         S: FusedStream<Item = T> + Unpin + 'static,
         T: 'static,
     {
-        slint::spawn_local(async move {
-            self.bind(input_stream).await.expect("stream terminated");
+        let tok = CancellationToken::new();
+        let _join = slint::spawn_local({
+            let tok = tok.clone();
+            async move {
+                tokio::select! {
+                    _ = tok.cancelled() => (),
+                    // An error means that input stream has ended before cancelled by caller.
+                    // There's no problem so we ignore error here.
+                    _ = self.watch(input_stream) => (),
+                }
+            }
         })
-        .unwrap()
+        .unwrap();
+        tok
     }
 }
 
@@ -118,7 +132,7 @@ mod tests {
 
         let (tx, rx) = watch::channel(0);
         slint::spawn_local(async move {
-            prop.bind(WatchStream::new(rx).fuse())
+            prop.watch(WatchStream::new(rx).fuse())
                 .await
                 .expect_err("should return error");
         })

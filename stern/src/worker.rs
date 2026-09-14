@@ -2,6 +2,7 @@ use std::{pin::Pin, sync::Arc};
 
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 const WORKER_CHANNEL_BUF: usize = 8;
 
@@ -11,17 +12,23 @@ pub struct WorkerThread<C> {
     #[debug(skip)]
     tx: mpsc::Sender<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>,
     cx: Arc<RwLock<C>>,
+    cancel_tok: CancellationToken,
 }
 
 impl<C> WorkerThread<C> {
     pub fn new(cx: C) -> Self {
         let (tx, rx) = mpsc::channel(WORKER_CHANNEL_BUF);
+        let cancel_tok = CancellationToken::new();
         let _join = std::thread::Builder::new()
             .name("stern-worker".to_string())
-            .spawn(move || Self::run(rx));
+            .spawn({
+                let cancel_tok = cancel_tok.clone();
+                move || Self::run(rx, cancel_tok)
+            });
         Self {
             tx,
             cx: Arc::new(RwLock::new(cx)),
+            cancel_tok,
         }
     }
 
@@ -37,11 +44,26 @@ impl<C> WorkerThread<C> {
         self.tx.blocking_send(Box::pin(fut)).unwrap();
     }
 
+    /// Stops background worker thread.
+    pub fn shutdown(&self) {
+        self.cancel_tok.cancel();
+    }
+
     #[tokio::main]
-    async fn run(mut rx: mpsc::Receiver<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>) {
+    async fn run(
+        mut rx: mpsc::Receiver<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>,
+        cancel_tok: CancellationToken,
+    ) {
         loop {
-            let fut = rx.recv().await.unwrap();
-            let _join = tokio::spawn(fut);
+            tokio::select! {
+                res = rx.recv() => {
+                    let fut = res.expect("all WorkerThread instance has been dropped");
+                    let _join = tokio::spawn(fut);
+                },
+                _ = cancel_tok.cancelled() => {
+                    break;
+                }
+            }
         }
     }
 }
@@ -68,6 +90,7 @@ impl<C> Clone for WorkerThread<C> {
         Self {
             tx: self.tx.clone(),
             cx: Arc::clone(&self.cx),
+            cancel_tok: self.cancel_tok.clone(),
         }
     }
 }
