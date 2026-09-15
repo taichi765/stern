@@ -11,7 +11,7 @@ const WORKER_CHANNEL_BUF: usize = 8;
 pub struct WorkerThread<C> {
     #[debug(skip)]
     tx: mpsc::Sender<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>,
-    cx: Arc<RwLock<C>>,
+    cx: Arc<C>,
     cancel_tok: CancellationToken,
 }
 
@@ -27,13 +27,13 @@ impl<C> WorkerThread<C> {
             });
         Self {
             tx,
-            cx: Arc::new(RwLock::new(cx)),
+            cx: Arc::new(cx),
             cancel_tok,
         }
     }
 
     /// Returns the context of worker.
-    pub fn context(&mut self) -> Arc<RwLock<C>> {
+    pub fn context(&mut self) -> Arc<C> {
         Arc::clone(&self.cx)
     }
 
@@ -75,7 +75,7 @@ where
 {
     pub fn spawn_cx<F, Fut>(&self, f: F)
     where
-        F: FnOnce(Arc<RwLock<C>>) -> Fut + Send + 'static,
+        F: FnOnce(Arc<C>) -> Fut + Send + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
         let cx = Arc::clone(&self.cx);
