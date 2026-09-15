@@ -1,6 +1,5 @@
 use std::{pin::Pin, sync::Arc};
 
-use parking_lot::RwLock;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -100,9 +99,11 @@ mod tests {
     use super::*;
     use tokio::sync::oneshot;
 
+    struct EmptyContext(());
+
     #[test]
     fn worker_spawns_task_immediately() {
-        let worker = WorkerThread::new();
+        let worker = WorkerThread::new(EmptyContext(()));
         let (tx, rx) = oneshot::channel();
 
         worker.spawn(async move {
