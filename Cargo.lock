@@ -3966,6 +3966,7 @@ dependencies = [
 name = "stern-macros"
 version = "0.1.0"
 dependencies = [
+ "heck",
  "proc-macro2",
  "quote",
  "slint",

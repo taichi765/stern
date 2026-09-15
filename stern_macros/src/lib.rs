@@ -1,7 +1,8 @@
 use crate::parse::{InnerGlobalComponent, PropertyField, RouteMacroAttr};
+use heck::ToUpperCamelCase;
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote, IdentFragment};
-use syn::{parse_macro_input, Ident, ItemEnum};
+use quote::{IdentFragment, format_ident, quote};
+use syn::{Ident, ItemEnum, Type, parse_macro_input};
 
 mod parse;
 
@@ -36,8 +37,9 @@ pub fn route(
         let typs = item.variants.iter().map(|v| {
             let vm_trait_name = viewmodel_trait_ident(&v.ident);
             let states_struct_name = state_struct_ident(&v.ident);
+            let mapper_trait_name = mapper_trait_ident(&v.ident);
             quote! {
-                #vm_trait_name, #states_struct_name,
+                #vm_trait_name, #states_struct_name, #mapper_trait_name,
             }
         });
         quote! {
@@ -117,6 +119,7 @@ fn adopter_inner(_attr: TokenStream, item: InnerGlobalComponent) -> TokenStream 
     let viewmodel_trait_name = viewmodel_trait_ident(&item.name);
 
     let state_struct = generate_state_struct(&item.name, &item.properties);
+    let mapper_trait = generate_mapper_trait(&item.name, &item.properties);
     let viewmodel_trait = {
         let callbacks = item.callbacks.iter().map(|f| {
             let fn_name = format_ident!("on_{}", &f.ident);
@@ -179,6 +182,8 @@ fn adopter_inner(_attr: TokenStream, item: InnerGlobalComponent) -> TokenStream 
 
         #viewmodel_trait
 
+        #mapper_trait
+
         #regiter_impl
     }
 }
@@ -186,51 +191,59 @@ fn adopter_inner(_attr: TokenStream, item: InnerGlobalComponent) -> TokenStream 
 fn generate_state_struct(base: &str, properties: &Vec<PropertyField>) -> TokenStream {
     let state_struct_name = state_struct_ident(base);
     let public_global_name = public_global_ident(base);
+    let mapper_trait_name = mapper_trait_ident(base);
+
     let state_struct_def = {
         let fields = properties.iter().map(|f| {
             let field_name = &f.ident;
             let field_ty = &f.ty;
+            let trait_type_member =
+                format_ident!("{}MappedType", f.ident.to_string().to_upper_camel_case());
             quote! {
-                pub #field_name: stern::PropertyHandle<#field_ty>,
+                pub #field_name: stern::MappedPropertyHandle<M::#trait_type_member, #field_ty>,
             }
         });
 
         quote! {
             #[derive(Debug)]
-            pub struct #state_struct_name {
+            pub struct #state_struct_name<M> where M: #mapper_trait_name{
                 #(#fields)*
+                _phantom: std::marker::PhantomData<M>, // fields.len() == 0のときM is never usedにならないように
+                // TODO: fields.len() == 0のときstructを生成しないほうが良いかも？
             }
         }
     };
     let state_struct_impl = {
         let field_impls = properties.iter().map(|f| {
             let field_name = &f.ident;
-            let get_method_name = format_ident!("get_{}", &f.ident);
             let set_method_name = format_ident!("set_{}", &f.ident);
+            let map_method_name = format_ident!("map_{}", &f.ident);
             quote! {
-                #field_name: stern::PropertyHandle::new(
+                #field_name: stern::MappedPropertyHandle::new_mapped(
                     {
-                        let adopter_weak = adopter_weak.clone();
-                        move || {
-                            let adopter_strong = adopter_weak.unwrap();
-                            adopter_strong.#get_method_name()
-                        }
-                    },
-                    {
+                        // setter
                         let adopter_weak = adopter_weak.clone();
                         move |val| {
                             let adopter_strong = adopter_weak.unwrap();
                             adopter_strong.#set_method_name(val)
                         }
                     },
+                    {
+                        // mapper
+                        move |val| {
+                            M::#map_method_name(val)
+                        }
+                    },
                 ),
             }
         });
         quote! {
-            impl #state_struct_name {
+            impl<M> #state_struct_name<M>
+                where M: Clone + #mapper_trait_name {
                 pub fn new(adopter_weak: slint::Weak<#public_global_name<'static>>) -> Self {
                     Self {
                         #(#field_impls)*
+                        _phantom: std::marker::PhantomData,
                     }
                 }
             }
@@ -240,6 +253,31 @@ fn generate_state_struct(base: &str, properties: &Vec<PropertyField>) -> TokenSt
         #state_struct_def
 
         #state_struct_impl
+    }
+}
+
+fn generate_mapper_trait(base: &str, properties: &Vec<PropertyField>) -> TokenStream {
+    let trait_name = mapper_trait_ident(base);
+    let members = properties.iter().map(|f| {
+        let type_member_name =
+            format_ident!("{}MappedType", f.ident.to_string().to_upper_camel_case());
+        let fn_name = format_ident!("map_{}", f.ident);
+
+        let default_type = if let Type::Path(p) = &f.ty {
+            &p.path
+        } else {
+            panic!("this kind of type is not supported as property type");
+        };
+        /* = #default_type; // associated type defaults are unstable*/
+        quote! {
+            type #type_member_name: Default;
+            fn #fn_name(value: Self::#type_member_name) -> #default_type;
+        }
+    });
+    quote! {
+        pub trait #trait_name {
+            #(#members)*
+        }
     }
 }
 
@@ -253,4 +291,8 @@ fn viewmodel_trait_ident(base: impl IdentFragment) -> Ident {
 
 fn public_global_ident(base: impl IdentFragment) -> Ident {
     format_ident!("{}Adopter", &base)
+}
+
+fn mapper_trait_ident(base: impl IdentFragment) -> Ident {
+    format_ident!("{}PropertyMappers", &base)
 }
