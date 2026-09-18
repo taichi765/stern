@@ -11,10 +11,11 @@ syn = { version = "3.0", features = ["full", "extra-traits"] }
 quote = "1.0"
 proc-macro2 = "1.0"
 heck = { workspace = true }
-prettyplease = "0.3.0"
 
 [dev-dependencies]
 trybuild = "1.0"
 insta = "1.48.0"
+prettyplease = "0.3.0"
+tempfile = { workspace = true }
 slint = { workspace = true }
 stern = { workspace = true }
