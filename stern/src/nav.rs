@@ -184,6 +184,7 @@ where
 
 struct NavControllerInner<R: RouteEnum> {
     route_property_setter: Box<dyn Fn(R::SlintKind)>,
+    #[allow(clippy::type_complexity)]
     on_navigate: Option<Box<dyn FnMut(&R)>>,
 }
 
@@ -215,7 +216,7 @@ where
     {
         // FIXME: このタイミングでは`NavHost.on_navigate()`が呼ばれない
         let kind: R::Kind = default_route.into();
-        route_property_setter(kind.into().into());
+        route_property_setter(kind.into());
         Self {
             on_navigate: None,
             route_property_setter: Box::new(route_property_setter),

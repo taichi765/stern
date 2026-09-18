@@ -83,7 +83,7 @@ pub fn adopter_inner(_attr: TokenStream, item: InnerGlobalComponent) -> TokenStr
     }
 }
 
-pub(crate) fn generate_state_struct(base: &Ident, properties: &Vec<PropertyField>) -> TokenStream {
+pub(crate) fn generate_state_struct(base: &Ident, properties: &[PropertyField]) -> TokenStream {
     let state_struct_name = state_struct_ident(base);
     let public_global_name = public_global_ident(base);
     let mapper_trait_name = mapper_trait_ident(base);
@@ -150,7 +150,7 @@ pub(crate) fn generate_state_struct(base: &Ident, properties: &Vec<PropertyField
     }
 }
 
-pub(crate) fn generate_mapper_trait(base: &Ident, properties: &Vec<PropertyField>) -> TokenStream {
+pub(crate) fn generate_mapper_trait(base: &Ident, properties: &[PropertyField]) -> TokenStream {
     let trait_name = mapper_trait_ident(base);
     let members = properties.iter().map(|f| {
         let type_member_name = mapper_trait_member_type_ident(&f.ident);
@@ -176,7 +176,7 @@ pub(crate) fn generate_mapper_trait(base: &Ident, properties: &Vec<PropertyField
 
 pub(crate) fn generate_define_mapper_macro(
     base_name: &Ident,
-    properties: &Vec<PropertyField>,
+    properties: &[PropertyField],
 ) -> TokenStream {
     let macro_name = define_mapper_macro_ident(base_name);
     let matchers = properties.iter().map(|f| {

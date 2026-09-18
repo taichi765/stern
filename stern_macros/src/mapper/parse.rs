@@ -139,7 +139,7 @@ impl Parse for MapperProperty {
             name: name.clone(),
             colon,
             brace,
-            domain_typ: domain_typ,
+            domain_typ,
             slint_typ: slint_typ.ok_or(syn::Error::new_spanned(
                 name.clone(),
                 "no entry of 'slint_typ' found",

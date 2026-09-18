@@ -74,14 +74,14 @@ impl Parse for InnerGlobalComponent {
                 callback_tracker_fields.push(f.to_owned());
             } else if ident.starts_with("change_tracker") {
                 change_tracker_fields.push(f.to_owned());
-            } else if let Ok(p) = map_property_field(&f) {
+            } else if let Ok(p) = map_property_field(f) {
                 property_fields.push(p);
-            } else if let Ok(cb) = map_callback_field(&f) {
+            } else if let Ok(cb) = map_callback_field(f) {
                 callback_fields.push(cb);
             } else if f.ident.as_ref().unwrap() == "globals" {
                 globals = Some(f.to_owned());
             } else {
-                return Err(syn::Error::new_spanned(&f, "unknown kind of field"));
+                return Err(syn::Error::new_spanned(f, "unknown kind of field"));
             }
         }
         let Some(globals) = globals else {
@@ -112,13 +112,13 @@ fn map_property_field(f: &Field) -> syn::Result<PropertyField> {
 
     // TODO: More readble error message
     let ok = segs.next().map(|seg| seg.ident == "sp");
-    if ok.is_none() || ok.unwrap() == false {
+    if ok.is_none() || ok.is_some_and(|ok| !ok) {
         return Err(syn::Error::new_spanned(f, "expected 'sp'"));
     };
 
     let args = segs
         .next()
-        .map(|seg| (seg.ident == "Property").then(|| &seg.arguments));
+        .map(|seg| (seg.ident == "Property").then_some(&seg.arguments));
     let Some(Some(args)) = args else {
         return Err(syn::Error::new_spanned(f, "expected 'Property'"));
     };
@@ -149,10 +149,10 @@ fn map_property_field(f: &Field) -> syn::Result<PropertyField> {
         ));
     };
 
-    return Ok(PropertyField {
+    Ok(PropertyField {
         ident: f.ident.clone().unwrap(),
         ty: ty.clone(),
-    });
+    })
 }
 
 fn map_callback_field(f: &Field) -> syn::Result<CallbackField> {
@@ -162,13 +162,13 @@ fn map_callback_field(f: &Field) -> syn::Result<CallbackField> {
     let mut segs = ty.path.segments.iter();
 
     let ok = segs.next().map(|seg| seg.ident == "sp");
-    if ok.is_none() || ok.unwrap() == false {
+    if ok.is_none() || ok.is_some_and(|ok| !ok) {
         return Err(syn::Error::new_spanned(f, "expected 'sp'"));
     };
 
     let args = segs
         .next()
-        .map(|seg| (seg.ident == "Callback").then(|| &seg.arguments));
+        .map(|seg| (seg.ident == "Callback").then_some(&seg.arguments));
     let Some(Some(PathArguments::AngleBracketed(args))) = args else {
         return Err(syn::Error::new_spanned(
             f,
