@@ -77,6 +77,8 @@ fn map_slint_private_type(typ: &Type) -> Type {
 mod tests {
     use std::io::Write;
 
+    use crate::{PropertyField, generate::generate_mapper_trait};
+
     use super::*;
 
     #[test]
@@ -115,10 +117,18 @@ mod tests {
             }",
         )
         .unwrap();
+        let properties = vec![PropertyField {
+            ident: format_ident!("score"),
+            ty: parse_quote!(i32),
+        }];
         let output = generate(input);
 
         let mut file = new_trybuild_file!();
         file.write_all(output.to_string().as_bytes()).unwrap();
+        {
+            let mapper_trait = generate_mapper_trait(&format_ident!("Score"), &properties);
+            file.write_all(mapper_trait.to_string().as_bytes()).unwrap();
+        }
         file.write_all(
             "fn main(){
             let _m = Mapper;

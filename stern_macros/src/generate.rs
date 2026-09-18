@@ -268,6 +268,10 @@ mod tests {
 
         let mut file = new_trybuild_file!();
         file.write_all(output.to_string().as_bytes()).unwrap();
+        {
+            let mapper_trait = generate_mapper_trait(&format_ident!("Score"), &properties);
+            file.write_all(mapper_trait.to_string().as_bytes()).unwrap();
+        }
         file.write_all(
             "
             define_score_mapper!{}
