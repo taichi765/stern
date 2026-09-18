@@ -278,4 +278,30 @@ mod tests {
         let pretty = prettyplease::unparse(&syn_file);
         insta::assert_snapshot!(pretty);
     }
+
+    #[test]
+    fn generate_state_struct_snapshot() {
+        let properties = vec![PropertyField {
+            ident: format_ident!("name"),
+            ty: parse_quote!(sp::SharedString),
+        }];
+        let output = generate_state_struct(&format_ident!("Hello"), &properties);
+
+        let syn_file = syn::parse_file(output.to_string().as_str()).unwrap();
+        let pretty = prettyplease::unparse(&syn_file);
+        insta::assert_snapshot!(pretty);
+    }
+
+    #[test]
+    fn generate_mapper_trait_snapshot() {
+        let properties = vec![PropertyField {
+            ident: format_ident!("name"),
+            ty: parse_quote!(sp::SharedString),
+        }];
+        let output = generate_mapper_trait(&format_ident!("GoodMorning"), &properties);
+
+        let syn_file = syn::parse_file(output.to_string().as_str()).unwrap();
+        let pretty = prettyplease::unparse(&syn_file);
+        insta::assert_snapshot!(pretty);
+    }
 }

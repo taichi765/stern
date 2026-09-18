@@ -1,0 +1,32 @@
+---
+source: stern_macros/src/generate.rs
+expression: pretty
+---
+#[derive(Debug)]
+pub struct HelloStates<M>
+where
+    M: HelloPropertyMappers,
+{
+    pub name: stern::MappedPropertyHandle<M::NameMappedType, sp::SharedString>,
+    _phantom: std::marker::PhantomData<M>,
+}
+impl<M> HelloStates<M>
+where
+    M: Clone + HelloPropertyMappers,
+{
+    pub fn new(adopter_weak: slint::Weak<HelloAdopter<'static>>) -> Self {
+        Self {
+            name: stern::MappedPropertyHandle::new_mapped(
+                {
+                    let adopter_weak = adopter_weak.clone();
+                    move |val| {
+                        let adopter_strong = adopter_weak.unwrap();
+                        adopter_strong.set_name(val)
+                    }
+                },
+                { move |val| { M::map_name(val) } },
+            ),
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}

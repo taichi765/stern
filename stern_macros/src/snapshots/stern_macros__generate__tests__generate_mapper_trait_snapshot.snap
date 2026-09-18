@@ -1,0 +1,8 @@
+---
+source: stern_macros/src/generate.rs
+expression: pretty
+---
+pub trait GoodMorningPropertyMappers {
+    type NameMappedType: Default;
+    fn map_name(value: Self::NameMappedType) -> sp::SharedString;
+}
