@@ -79,7 +79,7 @@ mod tests {
 
     use tempfile::NamedTempFile;
 
-    use crate::{PropertyField, generate_mapper_trait};
+    use crate::{PropertyField, generate::generate_mapper_trait};
 
     use super::*;
 
