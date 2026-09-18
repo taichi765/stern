@@ -1,0 +1,11 @@
+---
+source: stern_macros/src/lib.rs
+expression: pretty
+---
+#[macro_export]
+macro_rules! define_score_mapper {
+    {$(score to $score_typ:ty { $score_mapper:expr },)?} => {
+        stern::define_mapper_impl! { base_name : Score, properties : { score : {
+        $(domain_typ : $score_typ,)? slint_typ : i32, $(mapper : $score_mapper,)? }, } }
+    };
+}

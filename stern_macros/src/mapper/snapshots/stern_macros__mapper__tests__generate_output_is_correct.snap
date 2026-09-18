@@ -1,0 +1,14 @@
+---
+source: stern_macros/src/mapper/mod.rs
+expression: pretty
+---
+#[derive(Debug, Clone)]
+pub struct Mapper;
+impl ScorePropertyMappers for Mapper {
+    type ScoreMappedType = u32;
+    fn map_score(value: Self::ScoreMappedType) -> i32 {
+        ({
+            |value: u32| value.try_into().expect("failed to convert u32 into i32")
+        })(value)
+    }
+}
