@@ -1,5 +1,5 @@
 pub mod nav;
-pub use stern_macros::{adopter, route};
+pub use stern_macros::{adopter, define_mapper_impl, route};
 /// Re-exports external crates' types.
 pub mod re_exports {
     pub use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};

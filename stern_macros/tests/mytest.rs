@@ -1,4 +1,4 @@
-use std::cell::Cell;
+/*use std::cell::Cell;
 
 use slint::private_unstable_api::re_exports as sp;
 use stern as fw;
@@ -12,4 +12,4 @@ struct InnerTestAdopter {
     globals: sp::OnceCell<sp::Weak<()>>, // 本来は()ではなくSharedGlobals
 }
 
-struct Adopter(InnerTestAdopter);
+struct Adopter(InnerTestAdopter);*/

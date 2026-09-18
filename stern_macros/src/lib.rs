@@ -1,9 +1,13 @@
-use crate::parse::{InnerGlobalComponent, PropertyField, RouteMacroAttr};
-use heck::ToUpperCamelCase;
+use crate::{
+    mapper::parse::DefineMapperInput,
+    parse::{InnerGlobalComponent, PropertyField, RouteMacroAttr},
+};
+use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::TokenStream;
 use quote::{IdentFragment, format_ident, quote};
-use syn::{Ident, ItemEnum, Type, parse_macro_input};
+use syn::{Ident, ItemEnum, Type, ext::IdentExt, parse_macro_input};
 
+mod mapper;
 mod parse;
 
 /// Attribute used on `NavRoute` enum.
@@ -115,11 +119,18 @@ pub fn adopter(
     adopter_inner(attr.into(), item).into()
 }
 
+#[proc_macro]
+pub fn define_mapper_impl(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let input = parse_macro_input!(input as DefineMapperInput);
+    mapper::generate(input).into()
+}
+
 fn adopter_inner(_attr: TokenStream, item: InnerGlobalComponent) -> TokenStream {
     let viewmodel_trait_name = viewmodel_trait_ident(&item.name);
 
     let state_struct = generate_state_struct(&item.name, &item.properties);
     let mapper_trait = generate_mapper_trait(&item.name, &item.properties);
+    let mapper_macro = generate_define_mapper_macro(&item.name, &item.properties);
     let viewmodel_trait = {
         let callbacks = item.callbacks.iter().map(|f| {
             let fn_name = format_ident!("on_{}", &f.ident);
@@ -184,6 +195,8 @@ fn adopter_inner(_attr: TokenStream, item: InnerGlobalComponent) -> TokenStream 
 
         #mapper_trait
 
+        #mapper_macro
+
         #regiter_impl
     }
 }
@@ -197,8 +210,7 @@ fn generate_state_struct(base: &str, properties: &Vec<PropertyField>) -> TokenSt
         let fields = properties.iter().map(|f| {
             let field_name = &f.ident;
             let field_ty = &f.ty;
-            let trait_type_member =
-                format_ident!("{}MappedType", f.ident.to_string().to_upper_camel_case());
+            let trait_type_member = mapper_trait_member_type_ident(&f.ident);
             quote! {
                 pub #field_name: stern::MappedPropertyHandle<M::#trait_type_member, #field_ty>,
             }
@@ -259,8 +271,7 @@ fn generate_state_struct(base: &str, properties: &Vec<PropertyField>) -> TokenSt
 fn generate_mapper_trait(base: &str, properties: &Vec<PropertyField>) -> TokenStream {
     let trait_name = mapper_trait_ident(base);
     let members = properties.iter().map(|f| {
-        let type_member_name =
-            format_ident!("{}MappedType", f.ident.to_string().to_upper_camel_case());
+        let type_member_name = mapper_trait_member_type_ident(&f.ident);
         let fn_name = format_ident!("map_{}", f.ident);
 
         let default_type = if let Type::Path(p) = &f.ty {
@@ -281,6 +292,50 @@ fn generate_mapper_trait(base: &str, properties: &Vec<PropertyField>) -> TokenSt
     }
 }
 
+fn generate_define_mapper_macro(base_name: &str, properties: &Vec<PropertyField>) -> TokenStream {
+    let macro_name = define_mapper_macro_ident(base_name);
+    let matchers = properties.iter().map(|f| {
+        let name = &f.ident.unraw();
+        let typ_ident = format_ident!("{}_typ", f.ident);
+        let mapper_ident = format_ident!("{}_mapper", f.ident);
+        quote! {
+            $(
+                #name to $#typ_ident:ty {
+                    $#mapper_ident:expr
+                },
+            )?
+        }
+    });
+    let impl_calls = properties.iter().map(|f| {
+        let name = &f.ident;
+        let slint_typ = &f.ty;
+        let typ_ident = format_ident!("{}_typ", f.ident);
+        let mapper_ident = format_ident!("{}_mapper", f.ident);
+        quote! {
+            #name: {
+                $(domain_typ: #typ_ident)?,
+                slint_typ: #slint_typ,
+                 $(mapper: #mapper_ident)?,
+            },
+        }
+    });
+    quote! {
+        #[macro_export]
+        macro_rules! #macro_name {
+            {
+                #(#matchers)*
+            } => {
+                stern::define_mapper_impl!{
+                    base_name: #base_name,
+                    properties: {
+                        #(#impl_calls)*
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn state_struct_ident(base: impl IdentFragment) -> Ident {
     format_ident!("{}States", base)
 }
@@ -295,4 +350,50 @@ fn public_global_ident(base: impl IdentFragment) -> Ident {
 
 fn mapper_trait_ident(base: impl IdentFragment) -> Ident {
     format_ident!("{}PropertyMappers", &base)
+}
+
+fn mapper_trait_member_type_ident(prop_name: &Ident) -> Ident {
+    format_ident!(
+        "{}MappedType",
+        prop_name.unraw().to_string().to_upper_camel_case()
+    )
+}
+
+fn define_mapper_macro_ident(base_name: impl IdentFragment) -> Ident {
+    let base_name = format_ident!("{}", base_name).to_string().to_snake_case();
+    format_ident!("define_{}_mapper", &base_name)
+}
+
+#[cfg(test)]
+mod tests {
+    use syn::{Path, PathSegment, Type, TypePath, parse_quote};
+
+    use super::*;
+
+    #[test]
+    fn mapper_trait_member_type_ident_is_correct() {
+        let prop_name = format_ident!("score");
+        let member_type = mapper_trait_member_type_ident(&prop_name);
+        assert_eq!(member_type, "ScoreMappedType");
+    }
+
+    #[test]
+    fn define_mapper_macro_ident_is_correct() {
+        let base_name = format_ident!("Start");
+        let macro_name = define_mapper_macro_ident(&base_name);
+        assert_eq!(macro_name, "define_start_mapper");
+    }
+
+    #[test]
+    fn generate_define_mapper_macro_snapshot() {
+        let properties = vec![PropertyField {
+            ident: format_ident!("score"),
+            ty: syn::parse_quote!(slint::SharedString),
+        }];
+        let output = generate_define_mapper_macro("Score", &properties);
+
+        let file = syn::parse_file(output.to_string().as_str()).unwrap();
+        let pretty = prettyplease::unparse(&file);
+        insta::assert_snapshot!(pretty);
+    }
 }
