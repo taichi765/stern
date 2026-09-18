@@ -162,6 +162,10 @@ fn state_struct_ident(base: impl IdentFragment) -> Ident {
     format_ident!("{}States", base)
 }
 
+fn state_struct_mock_ident(base: impl IdentFragment) -> Ident {
+    format_ident!("{}StateMocks", base)
+}
+
 fn viewmodel_trait_ident(base: impl IdentFragment) -> Ident {
     format_ident!("{}ViewModelTrait", &base)
 }

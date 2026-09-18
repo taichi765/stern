@@ -14,9 +14,10 @@ impl<M> HelloStates<M>
 where
     M: Clone + HelloPropertyMappers,
 {
-    pub fn new(adopter_weak: slint::Weak<HelloAdopter<'static>>) -> Self {
+    #[doc(concat!("Creates new [`", HelloStates, "`] using [`", HelloAdopter, "`]."))]
+    pub fn new(adopter_weak: ::slint::Weak<HelloAdopter<'static>>) -> Self {
         Self {
-            name: stern::MappedPropertyHandle::new_mapped(
+            name: ::stern::MappedPropertyHandle::new_mapped(
                 {
                     let adopter_weak = adopter_weak.clone();
                     move |val| {
@@ -26,7 +27,7 @@ where
                 },
                 { move |val| { M::map_name(val) } },
             ),
-            _phantom: std::marker::PhantomData,
+            _phantom: ::core::marker::PhantomData,
         }
     }
 }

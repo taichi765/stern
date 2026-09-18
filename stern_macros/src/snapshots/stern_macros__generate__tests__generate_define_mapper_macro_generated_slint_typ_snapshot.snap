@@ -5,7 +5,7 @@ expression: pretty
 #[macro_export]
 macro_rules! define_ask_mapper {
     {$(yesno to $yesno_typ:ty { $yesno_mapper:expr },)?} => {
-        stern::define_mapper_impl! { base_name : Ask, properties : { yesno : {
+        ::stern::define_mapper_impl! { base_name : Ask, properties : { yesno : {
         $(domain_typ : $yesno_typ,)? slint_typ : $crate::YesNo, $(mapper :
         $yesno_mapper,)? }, } }
     };

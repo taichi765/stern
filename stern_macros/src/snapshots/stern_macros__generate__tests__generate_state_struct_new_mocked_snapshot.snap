@@ -1,0 +1,27 @@
+---
+source: stern_macros/src/generate.rs
+expression: pretty
+---
+#[doc = concat!(
+    "Creates new mocked [`", stringify!(SterrenNachtStates),
+    "`] with [`Rc`][::std::rc::Rc] and [`RefCell`][::core::cell::RefCell]"
+)]
+#[cfg(test)]
+pub fn new_mocked() -> (SterrenNachtStates, SterrenNachtStateMocks) {
+    let nacht_rc = ::std::rc::Rc::new(::core::cell::RefCell::new(Default::default()));
+    let state_struct = Self {
+        nacht: ::stern::MappedPropertyHandle::new_mapped(
+            {
+                let nacht_rc = ::std::rc::Rc::clone(&nacht_rc);
+                move |val| {
+                    let guard = nacht_rc.borrow_mut();
+                    *guard = val;
+                }
+            },
+            { move |val| { M::map_nacht(val) } },
+        ),
+        _phantom: ::core::marker::Phantomdata,
+    };
+    let mock_struct = SterrenNachtStateMocks { nacht };
+    (state_struct, mock_struct)
+}

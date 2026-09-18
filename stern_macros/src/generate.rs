@@ -1,10 +1,11 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
-use syn::{Ident, Type, ext::IdentExt};
+use syn::{Ident, ItemStruct, Type, ext::IdentExt, parse_quote};
 
 use crate::{
     InnerGlobalComponent, PropertyField, define_mapper_macro_ident, mapper_trait_ident,
-    mapper_trait_member_type_ident, public_global_ident, state_struct_ident, viewmodel_trait_ident,
+    mapper_trait_member_type_ident, public_global_ident, state_struct_ident,
+    state_struct_mock_ident, viewmodel_trait_ident,
 };
 
 pub fn adopter_inner(_attr: TokenStream, item: InnerGlobalComponent) -> TokenStream {
@@ -85,7 +86,6 @@ pub fn adopter_inner(_attr: TokenStream, item: InnerGlobalComponent) -> TokenStr
 
 pub(crate) fn generate_state_struct(base: &Ident, properties: &[PropertyField]) -> TokenStream {
     let state_struct_name = state_struct_ident(base);
-    let public_global_name = public_global_ident(base);
     let mapper_trait_name = mapper_trait_ident(base);
 
     let state_struct_def = {
@@ -107,46 +107,137 @@ pub(crate) fn generate_state_struct(base: &Ident, properties: &[PropertyField]) 
             }
         }
     };
-    let state_struct_impl = {
-        let field_impls = properties.iter().map(|f| {
-            let field_name = &f.ident;
-            let set_method_name = format_ident!("set_{}", &f.ident);
-            let map_method_name = format_ident!("map_{}", &f.ident);
-            quote! {
-                #field_name: stern::MappedPropertyHandle::new_mapped(
-                    {
-                        // setter
-                        let adopter_weak = adopter_weak.clone();
-                        move |val| {
-                            let adopter_strong = adopter_weak.unwrap();
-                            adopter_strong.#set_method_name(val)
-                        }
-                    },
-                    {
-                        // mapper
-                        move |val| {
-                            M::#map_method_name(val)
-                        }
-                    },
-                ),
-            }
-        });
-        quote! {
-            impl<M> #state_struct_name<M>
-                where M: Clone + #mapper_trait_name {
-                pub fn new(adopter_weak: slint::Weak<#public_global_name<'static>>) -> Self {
-                    Self {
-                        #(#field_impls)*
-                        _phantom: std::marker::PhantomData,
-                    }
-                }
-            }
-        }
-    };
+    let state_struct_impl = generate_state_struct_impl(base, properties);
     quote! {
         #state_struct_def
 
         #state_struct_impl
+    }
+}
+
+fn generate_state_struct_impl(base_name: &Ident, properties: &[PropertyField]) -> TokenStream {
+    let state_struct_name = state_struct_ident(base_name);
+    let state_mock_name = state_struct_mock_ident(base_name);
+    let public_global_name = public_global_ident(base_name);
+    let mapper_trait_name = mapper_trait_ident(base_name);
+
+    let field_impls = properties.iter().map(|f| {
+        let field_name = &f.ident;
+        let set_method_name = format_ident!("set_{}", &f.ident);
+        let map_method_name = format_ident!("map_{}", &f.ident);
+        quote! {
+            #field_name: ::stern::MappedPropertyHandle::new_mapped(
+                {
+                    // setter
+                    let adopter_weak = adopter_weak.clone();
+                    move |val| {
+                        let adopter_strong = adopter_weak.unwrap();
+                        adopter_strong.#set_method_name(val)
+                    }
+                },
+                {
+                    // mapper
+                    move |val| {
+                        M::#map_method_name(val)
+                    }
+                },
+            ),
+        }
+    });
+
+    quote! {
+        impl<M> #state_struct_name<M>
+            where M: Clone + #mapper_trait_name {
+            #[doc = concat!("Creates new [`", stringify!(#state_struct_name), "`] using [`", #public_global_name, "`].")]
+            pub fn new(adopter_weak: ::slint::Weak<#public_global_name<'static>>) -> Self {
+                Self {
+                    #(#field_impls)*
+                    _phantom: ::core::marker::PhantomData,
+                }
+            }
+        }
+    }
+}
+
+fn generate_mock_struct(base_name: &Ident, properties: &[PropertyField]) -> ItemStruct {
+    let state_mock_name = state_struct_mock_ident(base_name);
+
+    let fields = properties.iter().map(|f| {
+        let field_name = &f.ident;
+        let typ = &f.ty;
+        quote! {
+            #field_name: ::std::rc::Rc<::core::cell::RefCell<#typ>>,
+        }
+    });
+    parse_quote! {
+        pub struct #state_mock_name {
+            #(#fields)*
+        }
+    }
+}
+
+fn generate_state_struct_new_mocked(
+    base_name: &Ident,
+    properties: &[PropertyField],
+) -> TokenStream {
+    fn rc_variable_ident(prop_name: &Ident) -> Ident {
+        format_ident!("{}_rc", prop_name)
+    }
+
+    let state_struct_name = state_struct_ident(base_name);
+    let mock_struct_name = state_struct_mock_ident(base_name);
+
+    let rc_variables = properties.iter().map(|f| {
+        let rc_var_name = rc_variable_ident(&f.ident);
+        quote! {
+            let #rc_var_name = ::std::rc::Rc::new(::core::cell::RefCell::new(Default::default()));
+        }
+    });
+    let state_struct_field_inits = properties.iter().map(|f| {
+        let field_name = &f.ident;
+        let rc_var_name = rc_variable_ident(&f.ident);
+        let map_method_name = format_ident!("map_{}", &f.ident);
+
+        quote! {
+            #field_name: ::stern::MappedPropertyHandle::new_mapped(
+                {
+                    // setter
+                    let #rc_var_name = ::std::rc::Rc::clone(&#rc_var_name);
+                    move |val| {
+                        let guard = #rc_var_name.borrow_mut();
+                        *guard = val;
+                    }
+                },
+                {
+                    // mapper
+                    move |val| {
+                        M::#map_method_name(val)
+                    }
+                },
+            ),
+        }
+    });
+    let mock_struct_field_inits = properties.iter().map(|f| {
+        let name = &f.ident;
+        quote! {
+            #name,
+        }
+    });
+
+    quote! {
+        #[doc = concat!("Creates new mocked [`", stringify!(#state_struct_name), "`] with [`Rc`][::std::rc::Rc] and [`RefCell`][::core::cell::RefCell]")]
+        #[cfg(test)]
+        pub fn new_mocked() -> (#state_struct_name, #mock_struct_name){
+            #(#rc_variables)*
+            let state_struct = Self {
+                #(#state_struct_field_inits)*
+                _phantom: ::core::marker::Phantomdata,
+            };
+            let mock_struct = #mock_struct_name {
+                #(#mock_struct_field_inits)*
+            };
+            (state_struct, mock_struct)
+        }
     }
 }
 
@@ -200,7 +291,6 @@ pub(crate) fn generate_define_mapper_macro(
             let unrawed = ident.unraw();
             if ident != unrawed {
                 // slint_typ marked with 'r#' is always slint-generated type (enum or struct in *.slint file).
-                // parse_quote!(concat!module_path!(), #unrawed))
                 quote!($crate::#unrawed)
             } else {
                 quote! {#slint_typ_original}
@@ -307,6 +397,20 @@ mod tests {
         }];
         let output = generate_state_struct(&format_ident!("Hello"), &properties);
 
+        let syn_file = syn::parse_file(output.to_string().as_str()).unwrap();
+        let pretty = prettyplease::unparse(&syn_file);
+        insta::assert_snapshot!(pretty);
+    }
+
+    #[test]
+    fn generate_state_struct_new_mocked_snapshot() {
+        let properties = vec![PropertyField {
+            ident: format_ident!("nacht"),
+            ty: parse_quote!(sp::SharedString),
+        }];
+        let output = generate_state_struct_new_mocked(&format_ident!("SterrenNacht"), &properties);
+
+        println!("{}", output.to_string());
         let syn_file = syn::parse_file(output.to_string().as_str()).unwrap();
         let pretty = prettyplease::unparse(&syn_file);
         insta::assert_snapshot!(pretty);
