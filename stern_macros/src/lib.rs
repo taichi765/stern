@@ -5,7 +5,41 @@ use crate::{
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::TokenStream;
 use quote::{IdentFragment, format_ident, quote};
-use syn::{Ident, ItemEnum, Type, ext::IdentExt, parse_macro_input};
+use syn::{Ident, ItemEnum, Type, ext::IdentExt, parse_macro_input, parse_quote};
+
+#[macro_use]
+mod macros {
+    /// Utility macro to return the name of the current function.
+    ///
+    /// Copy & Pasted from <https://github.com/mitsuhiko/insta/blob/master/insta/src/macros.rs>.
+    #[doc(hidden)]
+    #[cfg(test)]
+    macro_rules! function_name {
+        () => {{
+            fn f() {}
+            fn type_name_of_val<T>(_: T) -> &'static str {
+                ::std::any::type_name::<T>()
+            }
+            let mut name = type_name_of_val(f).strip_suffix("::f").unwrap_or("");
+            while let Some(rest) = name.strip_suffix("::{{closure}}") {
+                name = rest;
+            }
+            name
+        }};
+    }
+
+    /// Creates new [`tempfile::NamedTempFile`] prefixed with function name.
+    #[cfg(test)]
+    macro_rules! new_trybuild_file {
+        () => {
+            ::tempfile::Builder::new()
+                .prefix(format!("{}.", function_name!()).as_str())
+                .suffix(".rs")
+                .tempfile()
+                .unwrap()
+        };
+    }
+}
 
 mod mapper;
 mod parse;
@@ -201,7 +235,7 @@ fn adopter_inner(_attr: TokenStream, item: InnerGlobalComponent) -> TokenStream 
     }
 }
 
-fn generate_state_struct(base: &str, properties: &Vec<PropertyField>) -> TokenStream {
+fn generate_state_struct(base: &Ident, properties: &Vec<PropertyField>) -> TokenStream {
     let state_struct_name = state_struct_ident(base);
     let public_global_name = public_global_ident(base);
     let mapper_trait_name = mapper_trait_ident(base);
@@ -268,7 +302,7 @@ fn generate_state_struct(base: &str, properties: &Vec<PropertyField>) -> TokenSt
     }
 }
 
-fn generate_mapper_trait(base: &str, properties: &Vec<PropertyField>) -> TokenStream {
+fn generate_mapper_trait(base: &Ident, properties: &Vec<PropertyField>) -> TokenStream {
     let trait_name = mapper_trait_ident(base);
     let members = properties.iter().map(|f| {
         let type_member_name = mapper_trait_member_type_ident(&f.ident);
@@ -292,7 +326,7 @@ fn generate_mapper_trait(base: &str, properties: &Vec<PropertyField>) -> TokenSt
     }
 }
 
-fn generate_define_mapper_macro(base_name: &str, properties: &Vec<PropertyField>) -> TokenStream {
+fn generate_define_mapper_macro(base_name: &Ident, properties: &Vec<PropertyField>) -> TokenStream {
     let macro_name = define_mapper_macro_ident(base_name);
     let matchers = properties.iter().map(|f| {
         let name = &f.ident.unraw();
@@ -308,14 +342,30 @@ fn generate_define_mapper_macro(base_name: &str, properties: &Vec<PropertyField>
     });
     let impl_calls = properties.iter().map(|f| {
         let name = &f.ident;
-        let slint_typ = &f.ty;
+
+        let slint_typ_original = &f.ty;
+        let slint_typ = if let Type::Path(tp) = &f.ty {
+            let ident = tp.path.segments.first().unwrap().ident.clone();
+            let unrawed = ident.unraw();
+            if ident != unrawed {
+                // slint_typ marked with 'r#' is always slint-generated type (enum or struct in *.slint file).
+                // parse_quote!(concat!module_path!(), #unrawed))
+                quote!($crate::#unrawed)
+            } else {
+                quote! {#slint_typ_original}
+            }
+        } else {
+            quote! {#slint_typ_original}
+        };
+
         let typ_ident = format_ident!("{}_typ", f.ident);
         let mapper_ident = format_ident!("{}_mapper", f.ident);
+
         quote! {
             #name: {
-                $(domain_typ: #typ_ident)?,
+                $(domain_typ: $#typ_ident,)?
                 slint_typ: #slint_typ,
-                 $(mapper: #mapper_ident)?,
+                $(mapper: $#mapper_ident,)?
             },
         }
     });
@@ -366,7 +416,10 @@ fn define_mapper_macro_ident(base_name: impl IdentFragment) -> Ident {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use syn::{Path, PathSegment, Type, TypePath, parse_quote};
+    use tempfile::NamedTempFile;
 
     use super::*;
 
@@ -388,12 +441,32 @@ mod tests {
     fn generate_define_mapper_macro_snapshot() {
         let properties = vec![PropertyField {
             ident: format_ident!("score"),
-            ty: syn::parse_quote!(slint::SharedString),
+            ty: syn::parse_quote!(i32),
         }];
-        let output = generate_define_mapper_macro("Score", &properties);
+        let output = generate_define_mapper_macro(&format_ident!("Score"), &properties);
 
-        let file = syn::parse_file(output.to_string().as_str()).unwrap();
-        let pretty = prettyplease::unparse(&file);
+        let syn_file = syn::parse_file(output.to_string().as_str()).unwrap();
+        let pretty = prettyplease::unparse(&syn_file);
+        insta::assert_snapshot!(pretty);
+
+        /*let mut file = new_trybuild_file!();
+        file.write_all(pretty.as_bytes()).unwrap();
+        file.write_all("fn main(){}".as_bytes()).unwrap();
+
+        let t = trybuild::TestCases::new();
+        t.pass(file.path());*/
+    }
+
+    #[test]
+    fn generate_define_mapper_macro_generated_slint_typ_snapshot() {
+        let properties = vec![PropertyField {
+            ident: format_ident!("yesno"),
+            ty: parse_quote!(r#YesNo),
+        }];
+        let output = generate_define_mapper_macro(&format_ident!("Ask"), &properties);
+
+        let syn_file = syn::parse_file(output.to_string().as_str()).unwrap();
+        let pretty = prettyplease::unparse(&syn_file);
         insta::assert_snapshot!(pretty);
     }
 }

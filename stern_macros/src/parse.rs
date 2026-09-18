@@ -30,7 +30,7 @@ impl Parse for RouteMacroAttr {
 pub struct InnerGlobalComponent {
     pub original_ident: Ident,
     /// `Xxx` if attributed struct's ident was `InnerXxxAdopter`.
-    pub name: String,
+    pub name: Ident,
     pub properties: Vec<PropertyField>,
     pub callbacks: Vec<CallbackField>,
     pub callback_trackers: Vec<Field>,
@@ -203,17 +203,18 @@ fn map_callback_field(f: &Field) -> syn::Result<CallbackField> {
 }
 
 /// Get `Xxx` from `InnerXxxAdopter`
-fn extract_name(ident: &Ident) -> syn::Result<String> {
-    let ident = ident.to_string();
-    let without_prefix = ident.strip_prefix("Inner").ok_or(syn::Error::new_spanned(
-        &ident,
+fn extract_name(ident: &Ident) -> syn::Result<Ident> {
+    let s = ident.to_string();
+    let without_prefix = s.strip_prefix("Inner").ok_or(syn::Error::new_spanned(
+        &s,
         "attributed type's ident should match the pattern of 'InnerXxxAdopter'",
     ))?;
     let without_suffix = without_prefix
         .strip_suffix("Adopter")
         .ok_or(syn::Error::new_spanned(
-            &ident,
+            &s,
             "attributed type's ident should match the pattern of 'InnerXxxAdopter'",
         ))?;
-    Ok(without_suffix.into())
+    let original_span = ident.span();
+    Ok(format_ident!("{}", without_suffix, span = original_span))
 }
