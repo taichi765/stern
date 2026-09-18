@@ -226,7 +226,7 @@ pub(crate) fn generate_define_mapper_macro(
             {
                 #(#matchers)*
             } => {
-                stern::define_mapper_impl!{
+                ::stern::define_mapper_impl!{
                     base_name: #base_name,
                     properties: {
                         #(#impl_calls)*

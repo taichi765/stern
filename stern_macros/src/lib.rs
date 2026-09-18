@@ -8,19 +8,18 @@ use quote::{IdentFragment, format_ident, quote};
 use syn::{Ident, ItemEnum, ext::IdentExt, parse_macro_input};
 
 #[macro_use]
-mod macros {
+#[cfg(test)]
+mod test_helper_macros {
     /// Utility macro to return the name of the current function.
     ///
     /// Copy & Pasted from <https://github.com/mitsuhiko/insta/blob/master/insta/src/macros.rs>.
     #[doc(hidden)]
-    #[cfg(test)]
     macro_rules! function_name {
         () => {{
             fn f() {}
-            fn type_name_of_val<T>(_: T) -> &'static str {
-                ::std::any::type_name::<T>()
-            }
-            let mut name = type_name_of_val(f).strip_suffix("::f").unwrap_or("");
+            let mut name = ::core::any::type_name_of_val(&f)
+                .strip_suffix("::f")
+                .unwrap_or("");
             while let Some(rest) = name.strip_suffix("::{{closure}}") {
                 name = rest;
             }
@@ -29,7 +28,6 @@ mod macros {
     }
 
     /// Creates new [`tempfile::NamedTempFile`] prefixed with function name.
-    #[cfg(test)]
     macro_rules! new_trybuild_file {
         () => {
             ::tempfile::Builder::new()
