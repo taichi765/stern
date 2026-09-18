@@ -148,14 +148,16 @@ mod tests {
     use super::*;
     use std::cell::Cell;
     use tokio::sync::watch;
-    use tokio_stream::StreamExt;
     use tokio_stream::wrappers::WatchStream;
 
     #[test]
     fn property_handle_bind_returns_err_when_stream_ends() {
         let val = Cell::new(0);
-        let prop = PropertyHandle::new(|v| {
-            val.set(v);
+        let prop = PropertyHandle::new({
+            let val = val.clone();
+            move |v| {
+                val.set(v);
+            }
         });
 
         let (tx, rx) = watch::channel(0);
