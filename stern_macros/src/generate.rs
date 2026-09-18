@@ -241,8 +241,7 @@ pub(crate) fn generate_define_mapper_macro(
 mod tests {
     use std::io::Write;
 
-    use syn::{Path, PathSegment, Type, TypePath, parse_quote};
-    use tempfile::NamedTempFile;
+    use syn::parse_quote;
 
     use super::*;
 
@@ -257,13 +256,30 @@ mod tests {
         let syn_file = syn::parse_file(output.to_string().as_str()).unwrap();
         let pretty = prettyplease::unparse(&syn_file);
         insta::assert_snapshot!(pretty);
+    }
 
-        /*let mut file = new_trybuild_file!();
-        file.write_all(pretty.as_bytes()).unwrap();
-        file.write_all("fn main(){}".as_bytes()).unwrap();
+    #[test]
+    fn generate_define_mapper_macro_compile_succeeds() {
+        let properties = vec![PropertyField {
+            ident: format_ident!("score"),
+            ty: syn::parse_quote!(i32),
+        }];
+        let output = generate_define_mapper_macro(&format_ident!("Score"), &properties);
+
+        let mut file = new_trybuild_file!();
+        file.write_all(output.to_string().as_bytes()).unwrap();
+        file.write_all(
+            "
+            define_score_mapper!{}
+            fn main(){
+                let _m = Mapper;
+            }"
+            .as_bytes(),
+        )
+        .unwrap();
 
         let t = trybuild::TestCases::new();
-        t.pass(file.path());*/
+        t.pass(file.path());
     }
 
     #[test]

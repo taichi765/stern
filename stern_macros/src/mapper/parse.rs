@@ -1,5 +1,6 @@
 use syn::{Expr, Ident, Token, Type, braced, parse::Parse, punctuated::Punctuated, token::Brace};
 
+#[allow(dead_code)] // may be used in future to report with a span
 #[derive(Debug, Clone)]
 pub struct DefineMapperInput {
     pub base_name: BaseName,
@@ -17,6 +18,7 @@ impl Parse for DefineMapperInput {
     }
 }
 
+#[allow(dead_code)] // may be used in future to report with a span
 #[derive(Debug, Clone)]
 pub struct BaseName {
     pub base_name_tok: Ident,
@@ -38,6 +40,7 @@ impl Parse for BaseName {
     }
 }
 
+#[allow(dead_code)] // may be used in future to report with a span
 #[derive(Debug, Clone)]
 pub struct Properties {
     pub properties_ident: Ident,
@@ -69,6 +72,7 @@ impl Parse for Properties {
     }
 }
 
+#[allow(dead_code)] // may be used in future to report with a span
 #[derive(Debug, Clone)]
 pub struct MapperProperty {
     pub name: Ident,
@@ -145,6 +149,7 @@ impl Parse for MapperProperty {
     }
 }
 
+#[allow(dead_code)] // may be used in future to report with a span
 #[derive(Debug, Clone)]
 pub struct DomainTypEntry {
     pub ident: Ident,
@@ -152,6 +157,7 @@ pub struct DomainTypEntry {
     pub typ: Type,
 }
 
+#[allow(dead_code)] // may be used in future to report with a span
 #[derive(Debug, Clone)]
 pub struct SlintTypEntry {
     pub ident: Ident,
@@ -159,6 +165,7 @@ pub struct SlintTypEntry {
     pub typ: Type,
 }
 
+#[allow(dead_code)] // may be used in future to report with a span
 #[derive(Debug, Clone)]
 pub struct MapperEntry {
     pub ident: Ident,
@@ -203,6 +210,8 @@ impl Parse for PropertyInfo {
 
 #[cfg(test)]
 mod tests {
+    use syn::parse_quote;
+
     use super::*;
 
     #[test]
@@ -217,6 +226,8 @@ mod tests {
             },count:{domain_typ: u32, slint_typ:i32,mapper:{value.try_into().unwrap()}}}",
         )
         .unwrap();
+        assert_eq!(got.base_name.name.to_string(), "Score");
+        assert_eq!(got.properties.properties.len(), 2);
     }
 
     #[test]
@@ -231,5 +242,22 @@ mod tests {
         }",
         )
         .unwrap();
+        assert_eq!(got.name.to_string(), "player_name");
+
+        let domain_typ = got.domain_typ.expect("domain_typ should be some");
+        assert!(match domain_typ.typ {
+            Type::Path(tp) => {
+                tp.path == parse_quote!(String)
+            }
+            _ => false,
+        });
+
+        let slint_typ = got.slint_typ.typ;
+        assert!(match slint_typ {
+            Type::Path(tp) => {
+                tp.path == parse_quote!(slint::SharedString)
+            }
+            _ => false,
+        });
     }
 }

@@ -27,6 +27,7 @@ impl Parse for RouteMacroAttr {
     }
 }
 
+#[allow(dead_code)] // may be used in future to report with a span
 pub struct InnerGlobalComponent {
     pub original_ident: Ident,
     /// `Xxx` if attributed struct's ident was `InnerXxxAdopter`.

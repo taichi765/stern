@@ -77,14 +77,10 @@ fn map_slint_private_type(typ: &Type) -> Type {
 mod tests {
     use std::io::Write;
 
-    use tempfile::NamedTempFile;
-
-    use crate::{PropertyField, generate::generate_mapper_trait};
-
     use super::*;
 
     #[test]
-    fn generate_output_is_correct() {
+    fn generate_output_snapshot() {
         let input: DefineMapperInput = syn::parse_str(
             "base_name: Score,
             properties: {
@@ -102,25 +98,38 @@ mod tests {
         let syn_file = syn::parse_file(output.to_string().as_str()).unwrap();
         let pretty = prettyplease::unparse(&syn_file);
         insta::assert_snapshot!(pretty);
+    }
 
-        /*let mut file = new_trybuild_file!();
-        file.write_all(pretty.as_bytes()).unwrap();
-        file.write_all("fn main(){}".as_bytes()).unwrap();
+    #[test]
+    fn generate_mapper_compile_succeeds() {
+        let input: DefineMapperInput = syn::parse_str(
+            "base_name: Score,
+            properties: {
+                score: {
+                    domain_typ: u32,
+                    slint_typ: i32,
+                    mapper: {
+                        |value:u32| value.try_into().expect(\"failed to convert u32 into i32\")
+                    },
+                },
+            }",
+        )
+        .unwrap();
+        let output = generate(input);
 
-        {
-            let mapper_trait = generate_mapper_trait(
-                &format_ident!("Score"),
-                &vec![PropertyField {
-                    ident: format_ident!("score"),
-                    ty: parse_quote!(i32),
-                }],
-            );
-            let syn_file = syn::parse_file(mapper_trait.to_string().as_str()).unwrap();
-            let pretty = prettyplease::unparse(&syn_file);
-            file.write_all(pretty.as_bytes()).unwrap();
-        }
+        let mut file = new_trybuild_file!();
+        file.write_all(output.to_string().as_bytes()).unwrap();
+        file.write_all(
+            "fn main(){
+            let _m = Mapper;
+            }
+            "
+            .as_bytes(),
+        )
+        .unwrap();
+
         let t = trybuild::TestCases::new();
-        t.pass(file.path());*/
+        t.pass(file.path());
     }
 
     #[test]
