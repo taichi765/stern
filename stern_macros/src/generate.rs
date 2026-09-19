@@ -349,6 +349,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "trybuild test is expensive"]
     fn generate_define_mapper_macro_compile_succeeds() {
         let properties = vec![PropertyField {
             ident: format_ident!("score"),

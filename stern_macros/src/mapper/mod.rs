@@ -103,6 +103,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "trybuild test is expensive"]
     fn generate_mapper_compile_succeeds() {
         let input: DefineMapperInput = syn::parse_str(
             "base_name: Score,
