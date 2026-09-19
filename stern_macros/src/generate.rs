@@ -107,9 +107,12 @@ pub(crate) fn generate_state_struct(base: &Ident, properties: &[PropertyField]) 
             }
         }
     };
+    let mock_struct_def = generate_mock_struct(base, properties);
     let state_struct_impl = generate_state_struct_impl(base, properties);
     quote! {
         #state_struct_def
+
+        #mock_struct_def
 
         #state_struct_impl
     }
@@ -117,7 +120,6 @@ pub(crate) fn generate_state_struct(base: &Ident, properties: &[PropertyField]) 
 
 fn generate_state_struct_impl(base_name: &Ident, properties: &[PropertyField]) -> TokenStream {
     let state_struct_name = state_struct_ident(base_name);
-    let state_mock_name = state_struct_mock_ident(base_name);
     let public_global_name = public_global_ident(base_name);
     let mapper_trait_name = mapper_trait_ident(base_name);
 
@@ -145,16 +147,26 @@ fn generate_state_struct_impl(base_name: &Ident, properties: &[PropertyField]) -
         }
     });
 
+    let new_mocked_fn = generate_state_struct_new_mocked(base_name, properties);
+
     quote! {
         impl<M> #state_struct_name<M>
             where M: Clone + #mapper_trait_name {
-            #[doc = concat!("Creates new [`", stringify!(#state_struct_name), "`] using [`", #public_global_name, "`].")]
+            #[doc = concat!(
+                "Creates new [`",
+                stringify!(#state_struct_name),
+                "`] using [`",
+                stringify!(#public_global_name),
+                "`]."
+            )]
             pub fn new(adopter_weak: ::slint::Weak<#public_global_name<'static>>) -> Self {
                 Self {
                     #(#field_impls)*
                     _phantom: ::core::marker::PhantomData,
                 }
             }
+
+            #new_mocked_fn
         }
     }
 }
@@ -166,7 +178,7 @@ fn generate_mock_struct(base_name: &Ident, properties: &[PropertyField]) -> Item
         let field_name = &f.ident;
         let typ = &f.ty;
         quote! {
-            #field_name: ::std::rc::Rc<::core::cell::RefCell<#typ>>,
+            pub #field_name: ::std::rc::Rc<::core::cell::RefCell<#typ>>,
         }
     });
     parse_quote! {
@@ -202,9 +214,9 @@ fn generate_state_struct_new_mocked(
             #field_name: ::stern::MappedPropertyHandle::new_mapped(
                 {
                     // setter
-                    let #rc_var_name = ::std::rc::Rc::clone(&#rc_var_name);
+                    let mut #rc_var_name = ::std::rc::Rc::clone(&#rc_var_name);
                     move |val| {
-                        let guard = #rc_var_name.borrow_mut();
+                        let mut guard = #rc_var_name.borrow_mut();
                         *guard = val;
                     }
                 },
@@ -219,19 +231,23 @@ fn generate_state_struct_new_mocked(
     });
     let mock_struct_field_inits = properties.iter().map(|f| {
         let name = &f.ident;
+        let rc_var = rc_variable_ident(&f.ident);
         quote! {
-            #name,
+            #name: #rc_var,
         }
     });
 
     quote! {
-        #[doc = concat!("Creates new mocked [`", stringify!(#state_struct_name), "`] with [`Rc`][::std::rc::Rc] and [`RefCell`][::core::cell::RefCell]")]
-        #[cfg(test)]
-        pub fn new_mocked() -> (#state_struct_name, #mock_struct_name){
+        #[doc = concat!(
+            "Creates new mocked [`",
+            stringify!(#state_struct_name),
+            "`] with [`Rc`][::std::rc::Rc] and [`RefCell`][::core::cell::RefCell]"
+        )]
+        pub fn new_mocked() -> (#state_struct_name<M>, #mock_struct_name){
             #(#rc_variables)*
             let state_struct = Self {
                 #(#state_struct_field_inits)*
-                _phantom: ::core::marker::Phantomdata,
+                _phantom: ::core::marker::PhantomData,
             };
             let mock_struct = #mock_struct_name {
                 #(#mock_struct_field_inits)*

@@ -10,11 +10,17 @@ where
     pub name: stern::MappedPropertyHandle<M::NameMappedType, sp::SharedString>,
     _phantom: std::marker::PhantomData<M>,
 }
+pub struct HelloStateMocks {
+    pub name: ::std::rc::Rc<::core::cell::RefCell<sp::SharedString>>,
+}
 impl<M> HelloStates<M>
 where
     M: Clone + HelloPropertyMappers,
 {
-    #[doc(concat!("Creates new [`", HelloStates, "`] using [`", HelloAdopter, "`]."))]
+    #[doc = concat!(
+        "Creates new [`", stringify!(HelloStates), "`] using [`",
+        stringify!(HelloAdopter), "`]."
+    )]
     pub fn new(adopter_weak: ::slint::Weak<HelloAdopter<'static>>) -> Self {
         Self {
             name: ::stern::MappedPropertyHandle::new_mapped(
@@ -29,5 +35,27 @@ where
             ),
             _phantom: ::core::marker::PhantomData,
         }
+    }
+    #[doc = concat!(
+        "Creates new mocked [`", stringify!(HelloStates),
+        "`] with [`Rc`][::std::rc::Rc] and [`RefCell`][::core::cell::RefCell]"
+    )]
+    pub fn new_mocked() -> (HelloStates<M>, HelloStateMocks) {
+        let name_rc = ::std::rc::Rc::new(::core::cell::RefCell::new(Default::default()));
+        let state_struct = Self {
+            name: ::stern::MappedPropertyHandle::new_mapped(
+                {
+                    let mut name_rc = ::std::rc::Rc::clone(&name_rc);
+                    move |val| {
+                        let mut guard = name_rc.borrow_mut();
+                        *guard = val;
+                    }
+                },
+                { move |val| { M::map_name(val) } },
+            ),
+            _phantom: ::core::marker::PhantomData,
+        };
+        let mock_struct = HelloStateMocks { name: name_rc };
+        (state_struct, mock_struct)
     }
 }
