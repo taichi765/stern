@@ -2,6 +2,7 @@ use std::{pin::Pin, sync::Arc};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
 
 const WORKER_CHANNEL_BUF: usize = 8;
 
@@ -65,6 +66,19 @@ impl<C> WorkerThread<C>
 where
     C: Sync + Send + 'static,
 {
+    /// Spawns async function in tokio's worker thread.
+    ///
+    /// # Example
+    /// ```
+    /// # use std::time::Duration;
+    /// # use stern::WorkerThread;
+    ///
+    /// let worker = WorkerThread::new(());
+    /// worker.spawn_cx(async move |_cx| {
+    ///     tokio::time::sleep(Duration::from_secs(1)).await;
+    ///     println!("Hello, World!");
+    /// })
+    /// ```
     pub fn spawn_cx<F, Fut>(&self, f: F)
     where
         F: FnOnce(Arc<C>) -> Fut + Send + 'static,
@@ -73,6 +87,32 @@ where
         let cx = Arc::clone(&self.cx);
         self.tx
             .blocking_send(Box::pin(async move { f(cx).await }))
+            .unwrap();
+    }
+
+    /// Spawns async function with current span, using [`tracing::Instrument::in_current_span()`].
+    ///
+    /// Equivalent to the code below using [`spawn_cx()`][WorkerThread::spawn_cx]:
+    /// ```
+    /// # use stern::WorkerThread;
+    /// use tracing::{Instrument, trace};
+    ///
+    /// let worker = WorkerThread::new(());
+    /// worker.spawn_cx(move |_cx| {
+    ///     async move {
+    ///         trace!("shaving yak");
+    ///     }
+    ///     .in_current_span()
+    /// });
+    /// ```
+    pub fn spawn_spanned<F, Fut>(&self, f: F)
+    where
+        F: FnOnce(Arc<C>) -> Fut + Send + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        let cx = Arc::clone(&self.cx);
+        self.tx
+            .blocking_send(Box::pin(async move { f(cx).await }.in_current_span()))
             .unwrap();
     }
 }
