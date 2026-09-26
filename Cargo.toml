@@ -10,7 +10,7 @@ version = "0.1.0"
 stern = { path = "./stern" }
 stern-macros = { path = "./stern_macros" }
 
-slint = { git = "https://github.com/taichi765/slint", branch = "feat/add-compiler-config-for-attribute" }
+slint = { git = "https://github.com/taichi765/slint" }
 
 thiserror = "2.0.18"
 futures-util = "0.3"
