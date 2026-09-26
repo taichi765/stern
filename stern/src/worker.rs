@@ -139,7 +139,7 @@ mod tests {
         let worker = WorkerThread::new(EmptyContext(()));
         let (tx, rx) = oneshot::channel();
 
-        worker.spawn(async move {
+        worker.spawn_cx(async move |_| {
             tx.send("Hello!").unwrap();
         });
 
