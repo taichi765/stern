@@ -36,13 +36,6 @@ impl<C> WorkerThread<C> {
         Arc::clone(&self.cx)
     }
 
-    pub fn spawn<F>(&self, fut: F)
-    where
-        F: Future<Output = ()> + Send + 'static,
-    {
-        self.tx.blocking_send(Box::pin(fut)).unwrap();
-    }
-
     /// Stops background worker thread.
     pub fn shutdown(&self) {
         self.cancel_tok.cancel();
