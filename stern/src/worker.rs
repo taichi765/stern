@@ -7,14 +7,106 @@ use tracing::Instrument;
 const WORKER_CHANNEL_BUF: usize = 8;
 
 /// A thread to run futures depends on tokio runtime.
-#[derive(derive_more::Debug)]
+#[derive(Debug)]
 pub struct WorkerThread<C, E> {
+    foreground_executor: E,
+    background_executor: BackgroundExecutor<C>,
+}
+
+impl<C, E: Clone> Clone for WorkerThread<C, E> {
+    fn clone(&self) -> Self {
+        Self {
+            foreground_executor: self.foreground_executor.clone(),
+            background_executor: self.background_executor.clone(),
+        }
+    }
+}
+
+/// A handle to the background worker thread.
+#[derive(derive_more::Debug)]
+pub struct BackgroundExecutor<C> {
     #[debug(skip)]
     tx: mpsc::Sender<Pin<Box<dyn Future<Output = ()> + Send + 'static>>>,
     cx: Arc<C>,
-    foreground_executor: E,
     /// Token to stop background worker thread.
-    bg_cancel_tok: CancellationToken,
+    cancel_tok: CancellationToken,
+}
+
+impl<C> Clone for BackgroundExecutor<C> {
+    fn clone(&self) -> Self {
+        Self {
+            tx: self.tx.clone(),
+            cx: Arc::clone(&self.cx),
+            cancel_tok: self.cancel_tok.clone(),
+        }
+    }
+}
+
+impl<C> BackgroundExecutor<C> {
+    /// Stops the background worker thread.
+    pub fn shutdown(&self) {
+        self.cancel_tok.cancel();
+    }
+
+    /// Returns the context of worker.
+    pub fn context(&self) -> Arc<C> {
+        Arc::clone(&self.cx)
+    }
+}
+
+impl<C> BackgroundExecutor<C>
+where
+    C: Send + Sync + 'static,
+{
+    /// Spawns async function in tokio's worker thread.
+    ///
+    /// # Example
+    /// ```
+    /// # use std::time::Duration;
+    /// # use stern::WorkerThread;
+    ///
+    /// let worker = WorkerThread::new(());
+    /// worker.spawn_cx(async move |_cx| {
+    ///     tokio::time::sleep(Duration::from_secs(1)).await;
+    ///     println!("Hello, World!");
+    /// })
+    /// ```
+    pub fn spawn<F, Fut>(&self, f: F)
+    where
+        F: FnOnce(Arc<C>) -> Fut + Send + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        let cx = Arc::clone(&self.cx);
+        self.tx
+            .blocking_send(Box::pin(async move { f(cx).await }))
+            .unwrap();
+    }
+
+    /// Spawns async function with current span, using [`tracing::Instrument::in_current_span()`].
+    ///
+    /// Equivalent to the code below using [`spawn_cx()`][WorkerThread::spawn_cx]:
+    /// ```
+    /// # use stern::WorkerThread;
+    /// use tracing::{Instrument, trace};
+    ///
+    /// let worker = WorkerThread::new(());
+    /// worker.spawn_cx(move |_cx| {
+    ///     async move {
+    ///         trace!("shaving yak");
+    ///     }
+    ///     .in_current_span()
+    /// });
+    /// ```
+    pub fn spawn_spanned<F, Fut>(&self, f: F)
+    where
+        F: FnOnce(Arc<C>) -> Fut + Send + 'static,
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        let cx = Arc::clone(&self.cx);
+        self.tx
+            .blocking_send(Box::pin(async move { f(cx).await }.in_current_span()))
+            .unwrap();
+    }
 }
 
 pub trait ForegroundExecutor {
@@ -86,15 +178,25 @@ impl SmolExecutor {
 }
 
 impl ForegroundExecutor for SmolExecutor {
-    type SpawnedHandle<T> = smol::Task<T>;
+    type SpawnedHandle<T> = ();
 
     /// Spawns future using [`smol::Executor::spawn()`].
-    fn spawn<T, Fut>(&self, fut: Fut) -> smol::Task<T>
+    ///
+    /// The function does not return [`smol::Task`] but `()`.
+    ///
+    /// [`Task::detach()`] is called inside the function because if the caller does not keep
+    /// the returned value alive, spawned task is cancelled.
+    ///
+    /// The caller does not know whether the actual executor is [`SlintExecutor`] or [`SmolExecutor`] and so
+    /// returned value need to be kept alive or not.
+    ///
+    /// [`Task::detach()`]: smol::Task::detach
+    fn spawn<T, Fut>(&self, fut: Fut) -> Self::SpawnedHandle<T>
     where
         Fut: Future<Output = T> + 'static,
         T: 'static,
     {
-        self.ex.spawn(fut)
+        self.ex.spawn(fut).detach();
     }
 }
 
@@ -114,6 +216,12 @@ impl<C> WorkerThread<C, SmolExecutor> {
     pub fn new_smol(cx: C) -> Self {
         Self::new_with_executor(cx, SmolExecutor::new())
     }
+
+    /// Stops background worker thread and foreground worker.
+    pub fn shutdown_all(&self) {
+        self.foreground_executor().stop();
+        self.background_executor().shutdown();
+    }
 }
 
 impl<C, E> WorkerThread<C, E> {
@@ -128,26 +236,28 @@ impl<C, E> WorkerThread<C, E> {
                 move || Self::run(rx, cancel_tok)
             });
         Self {
-            tx,
-            cx: Arc::new(cx),
             foreground_executor: ex,
-            bg_cancel_tok: cancel_tok,
+            background_executor: BackgroundExecutor {
+                tx,
+                cx: Arc::new(cx),
+                cancel_tok,
+            },
         }
     }
 
     /// Returns the context of worker.
     pub fn context(&mut self) -> Arc<C> {
-        Arc::clone(&self.cx)
-    }
-
-    /// Stops background worker thread.
-    pub fn shutdown(&self) {
-        self.bg_cancel_tok.cancel();
+        self.background_executor().context()
     }
 
     /// Returns reference to the foreground executor.
     pub fn foreground_executor(&self) -> &E {
         &self.foreground_executor
+    }
+
+    /// Returns reference to the background executor.
+    pub fn background_executor(&self) -> &BackgroundExecutor<C> {
+        &self.background_executor
     }
 
     #[tokio::main]
@@ -206,10 +316,7 @@ where
         F: FnOnce(Arc<C>) -> Fut + Send + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        let cx = Arc::clone(&self.cx);
-        self.tx
-            .blocking_send(Box::pin(async move { f(cx).await }))
-            .unwrap();
+        self.background_executor().spawn(f);
     }
 
     /// Spawns async function with current span, using [`tracing::Instrument::in_current_span()`].
@@ -232,24 +339,7 @@ where
         F: FnOnce(Arc<C>) -> Fut + Send + 'static,
         Fut: Future<Output = ()> + Send + 'static,
     {
-        let cx = Arc::clone(&self.cx);
-        self.tx
-            .blocking_send(Box::pin(async move { f(cx).await }.in_current_span()))
-            .unwrap();
-    }
-}
-
-impl<C, E> Clone for WorkerThread<C, E>
-where
-    E: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            tx: self.tx.clone(),
-            cx: Arc::clone(&self.cx),
-            foreground_executor: self.foreground_executor.clone(),
-            bg_cancel_tok: self.bg_cancel_tok.clone(),
-        }
+        self.background_executor().spawn_spanned(f);
     }
 }
 
@@ -278,12 +368,12 @@ mod tests {
         let (tx, rx) = oneshot::channel();
         let worker = WorkerThread::new_smol(EmptyContext(()));
 
-        let _handle = worker.spawn_local({
+        worker.spawn_local({
             let worker = worker.clone();
             async move {
                 let msg = rx.await.unwrap();
                 assert_eq!(msg, "Roses are red");
-                worker.foreground_executor().stop();
+                worker.shutdown_all();
             }
         });
 
@@ -297,12 +387,14 @@ mod tests {
         let worker = WorkerThread::new(EmptyContext(()));
         let (tx, rx) = oneshot::channel();
 
-        let worker_clone = worker.clone();
-        let _ = worker.spawn_local(async move {
-            let msg = rx.await.unwrap();
-            assert_eq!(msg, "Violets are blue");
-            worker_clone.shutdown();
-            slint::quit_event_loop().unwrap();
+        worker.spawn_local({
+            let worker = worker.clone();
+            async move {
+                let msg = rx.await.unwrap();
+                assert_eq!(msg, "Violets are blue");
+                worker.background_executor().shutdown();
+                slint::quit_event_loop().unwrap();
+            }
         });
 
         tx.send("Violets are blue").unwrap();
