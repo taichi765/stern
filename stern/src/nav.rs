@@ -30,7 +30,7 @@ where
     fn on_navigate(&mut self, route: &R) {
         debug!(?route, "NavHost: searching registered destination");
         let kind: R::Kind = route.into();
-        let dest = self.destinations.get(&kind).unwrap(); // checked in Builder
+        let dest = self.destinations.get_mut(&kind).unwrap(); // checked in Builder
         dest.load(route);
     }
 
@@ -135,7 +135,7 @@ pub trait NavDestination<R: RouteEnum> {
     /// Load viewmodel's state with given arguments by `route`.
     ///
     /// Invariant: given `route`'s variant is the variant which returned `true` in [NavDestination::matches()].
-    fn load(&self, route: &R);
+    fn load(&mut self, route: &R);
 
     fn route(&self) -> R::Kind;
 }
