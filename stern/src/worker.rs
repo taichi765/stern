@@ -293,6 +293,7 @@ mod tests {
 
     #[test]
     fn slint_spawn_local_works_fine() {
+        i_slint_backend_testing::init_integration_test_with_system_time();
         let worker = WorkerThread::new(EmptyContext(()));
         let (tx, rx) = oneshot::channel();
 
