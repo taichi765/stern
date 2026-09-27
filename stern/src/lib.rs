@@ -5,7 +5,7 @@ pub mod re_exports {
     pub use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 }
 
-mod worker;
+pub mod worker;
 pub use worker::WorkerThread;
 
 mod property;
