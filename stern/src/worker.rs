@@ -1,4 +1,4 @@
-use std::{pin::Pin, rc::Rc, sync::Arc};
+use std::{cell::RefCell, pin::Pin, rc::Rc, sync::Arc};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -112,10 +112,12 @@ where
 pub trait ForegroundExecutor {
     type SpawnedHandle<T>;
 
-    fn spawn<T, Fut>(&self, fut: Fut) -> Self::SpawnedHandle<T>
+pub trait ForegroundExecutor {
+    type SpawnedHandle;
+
+    fn spawn<Fut>(&self, fut: Fut) -> Self::SpawnedHandle
     where
-        Fut: Future<Output = T> + 'static,
-        T: 'static;
+        Fut: Future<Output = ()> + 'static;
 }
 
 /// Executor using [`slint`]'s event loop.
@@ -130,42 +132,59 @@ impl SlintExecutor {
 }
 
 impl ForegroundExecutor for SlintExecutor {
-    type SpawnedHandle<T> = slint::JoinHandle<T>;
+    type SpawnedHandle = slint::JoinHandle<()>;
 
     /// Spawns future using [`slint::spawn_local()`].
     ///
     /// Panics when [`slint::spawn_local()`] returned error.
-    fn spawn<T, Fut>(&self, fut: Fut) -> Self::SpawnedHandle<T>
+    fn spawn<Fut>(&self, fut: Fut) -> Self::SpawnedHandle
     where
-        Fut: Future<Output = T> + 'static,
+        Fut: Future<Output = ()> + 'static,
     {
         slint::spawn_local(fut).expect("slint executor panicked")
     }
 }
 
+/// Foreground executor backed by [`smol::LocalExecutor`].
+///
+/// This executor is designed to emulate [`slint::spawn_local()`].
 #[derive(Debug, Clone)]
 pub struct SmolExecutor {
     cancel_tok: CancellationToken,
     ex: Rc<smol::LocalExecutor<'static>>,
+    spawned_tasks: Rc<RefCell<Vec<smol::Task<()>>>>,
 }
 
 impl SmolExecutor {
     pub fn new() -> Self {
         let ex = Rc::new(smol::LocalExecutor::new());
         let cancel_tok = CancellationToken::new();
-        Self { cancel_tok, ex }
+        Self {
+            cancel_tok,
+            ex,
+            spawned_tasks: Default::default(),
+        }
     }
 
     /// Starts foreground worker like [`slint::run_event_loop()`].
     pub fn start(&self) {
-        let cancel_tok = self.cancel_tok.clone();
-        let ex = self.ex.clone();
         smol::block_on(async {
             loop {
-                let cancelled = cancel_tok.cancelled();
+                let handle_tick = async || {
+                    let idx = self
+                        .spawned_tasks
+                        .borrow()
+                        .iter()
+                        .enumerate()
+                        .find_map(|(idx, t)| t.is_finished().then_some(idx));
+                    if let Some(idx) = idx {
+                        let task = self.spawned_tasks.borrow_mut().remove(idx);
+                        task.await
+                    }
+                };
                 tokio::select! {
-                    _ = cancelled => break,
-                    _ = ex.tick() => ()
+                    _ = self.cancel_tok.cancelled() => break,
+                    _ = self.ex.tick() => handle_tick().await,
                 }
             }
         });
@@ -178,7 +197,7 @@ impl SmolExecutor {
 }
 
 impl ForegroundExecutor for SmolExecutor {
-    type SpawnedHandle<T> = ();
+    type SpawnedHandle = ();
 
     /// Spawns future using [`smol::Executor::spawn()`].
     ///
@@ -191,12 +210,12 @@ impl ForegroundExecutor for SmolExecutor {
     /// returned value need to be kept alive or not.
     ///
     /// [`Task::detach()`]: smol::Task::detach
-    fn spawn<T, Fut>(&self, fut: Fut) -> Self::SpawnedHandle<T>
+    fn spawn<Fut>(&self, fut: Fut) -> Self::SpawnedHandle
     where
-        Fut: Future<Output = T> + 'static,
-        T: 'static,
+        Fut: Future<Output = ()> + 'static,
     {
-        self.ex.spawn(fut).detach();
+        let task = self.ex.spawn(fut);
+        self.spawned_tasks.borrow_mut().push(task);
     }
 }
 
@@ -285,10 +304,9 @@ where
     E: ForegroundExecutor,
 {
     /// Spawns future on the current thread.
-    pub fn spawn_local<T, Fut>(&self, fut: Fut) -> E::SpawnedHandle<T>
+    pub fn spawn_local<Fut>(&self, fut: Fut) -> E::SpawnedHandle
     where
-        Fut: Future<Output = T> + 'static,
-        T: 'static,
+        Fut: Future<Output = ()> + 'static,
     {
         self.foreground_executor.spawn(fut)
     }
@@ -382,22 +400,32 @@ mod tests {
     }
 
     #[test]
-    fn slint_spawn_local_works_fine() {
-        i_slint_backend_testing::init_integration_test_with_system_time();
-        let worker = WorkerThread::new(EmptyContext(()));
-        let (tx, rx) = oneshot::channel();
-
+    #[should_panic = "Boom!"]
+    fn smol_propagates_panic() {
+        let worker = WorkerThread::new_smol(EmptyContext(()));
         worker.spawn_local({
-            let worker = worker.clone();
+            let guard = worker.background_executor().drop_guard();
             async move {
-                let msg = rx.await.unwrap();
-                assert_eq!(msg, "Violets are blue");
-                worker.background_executor().shutdown();
-                slint::quit_event_loop().unwrap();
+                let _guard = guard;
+                panic!("Boom!");
             }
         });
+        worker.foreground_executor().start();
+    }
 
-        tx.send("Violets are blue").unwrap();
+    #[test]
+    #[should_panic = "Boom!"]
+    fn slint_propagates_panic() {
+        i_slint_backend_testing::init_integration_test_with_system_time();
+
+        let worker = WorkerThread::new(EmptyContext(()));
+        worker.spawn_local({
+            let guard = worker.background_executor().drop_guard();
+            async move {
+                let _guard = guard;
+                panic!("Boom!");
+            }
+        });
         slint::run_event_loop().unwrap();
     }
 }
