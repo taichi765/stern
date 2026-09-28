@@ -1,0 +1,35 @@
+error[E0277]: `Rc<async_executor::LocalExecutor<'static>>` cannot be sent between threads safely
+ --> tests/trybuild/smol_executor.rs:4:19
+  |
+4 |     assert_send::<stern::worker::SmolExecutor>();
+  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Rc<async_executor::LocalExecutor<'static>>` cannot be sent between threads safely
+  |
+  = help: within `SmolExecutor`, the trait `Send` is not implemented for `Rc<async_executor::LocalExecutor<'static>>`
+note: required because it appears within the type `SmolExecutor`
+ --> src/worker.rs
+  |
+  | pub struct SmolExecutor {
+  |            ^^^^^^^^^^^^
+note: required by a bound in `assert_send`
+ --> tests/trybuild/smol_executor.rs:1:19
+  |
+1 | fn assert_send<T: Send>() {}
+  |                   ^^^^ required by this bound in `assert_send`
+
+error[E0277]: `Rc<RefCell<Vec<async_task::task::Task<()>>>>` cannot be sent between threads safely
+ --> tests/trybuild/smol_executor.rs:4:19
+  |
+4 |     assert_send::<stern::worker::SmolExecutor>();
+  |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Rc<RefCell<Vec<async_task::task::Task<()>>>>` cannot be sent between threads safely
+  |
+  = help: within `SmolExecutor`, the trait `Send` is not implemented for `Rc<RefCell<Vec<async_task::task::Task<()>>>>`
+note: required because it appears within the type `SmolExecutor`
+ --> src/worker.rs
+  |
+  | pub struct SmolExecutor {
+  |            ^^^^^^^^^^^^
+note: required by a bound in `assert_send`
+ --> tests/trybuild/smol_executor.rs:1:19
+  |
+1 | fn assert_send<T: Send>() {}
+  |                   ^^^^ required by this bound in `assert_send`
