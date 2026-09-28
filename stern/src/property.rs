@@ -145,32 +145,51 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        WorkerThread,
+        worker::{ForegroundExecutor, SmolExecutor},
+    };
+
     use super::*;
-    use std::cell::Cell;
-    use tokio::sync::watch;
+    use std::{cell::Cell, time::Duration};
+    use tokio::sync::{oneshot, watch};
     use tokio_stream::wrappers::WatchStream;
 
+    // TODO: Add run_current() method on WorkerThread
     #[test]
     fn property_handle_bind_returns_err_when_stream_ends() {
-        let val = Cell::new(0);
+        let worker = WorkerThread::new_smol(());
+        let val = Rc::new(Cell::new(0));
         let prop = PropertyHandle::new({
-            let val = val.clone();
+            let val = Rc::clone(&val);
             move |v| {
                 val.set(v);
             }
         });
 
         let (tx, rx) = watch::channel(0);
-        slint::spawn_local(async move {
+        let (quit_tx, quit_rx) = oneshot::channel();
+        worker.spawn_local(async move {
             prop.watch(WatchStream::new(rx).fuse())
                 .await
                 .expect_err("should return error");
-        })
-        .unwrap();
-        tx.send(1).unwrap();
-        assert_eq!(val.get(), 1);
-        tx.send(2).unwrap();
-        assert_eq!(val.get(), 2);
-        drop(tx);
+        });
+        worker.spawn_local({
+            let worker = worker.clone();
+            async move {
+                quit_rx.await.unwrap();
+                worker.shutdown_all();
+            }
+        });
+        worker.spawn_local(async move {
+            tx.send(1).unwrap();
+            assert_eq!(val.get(), 1);
+
+            tx.send(2).unwrap();
+            assert_eq!(val.get(), 2);
+
+            quit_tx.send(()).unwrap();
+        });
+        worker.foreground_executor().start();
     }
 }
