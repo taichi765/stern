@@ -133,8 +133,11 @@ pub trait ForegroundExecutor {
 }
 
 /// Executor using [`slint`]'s event loop.
+///
+/// This type implements `!Send` because [`slint::spawn_local()`] cannot be called from non-main thread.
 #[derive(Debug, Clone)]
 pub struct SlintExecutor {
+    // FIXME: using marker type with Rc until negative_impls will be stabilized
     _marker: PhantomData<Rc<()>>,
 }
 
