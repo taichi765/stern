@@ -13,7 +13,7 @@ proc-macro2 = "1.0"
 heck = { workspace = true }
 
 [dev-dependencies]
-trybuild = "1.0"
+trybuild = { workspace = true }
 insta = "1.48.0"
 prettyplease = "0.3.0"
 tempfile = { workspace = true }

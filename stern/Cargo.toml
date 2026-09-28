@@ -21,3 +21,4 @@ smol = { workspace = true }
 [dev-dependencies]
 tokio-stream = { workspace = true, features = ["sync"] }
 i-slint-backend-testing = { workspace = true }
+trybuild = { workspace = true }

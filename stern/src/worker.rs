@@ -1,4 +1,4 @@
-use std::{cell::RefCell, pin::Pin, rc::Rc, sync::Arc};
+use std::{cell::RefCell, marker::PhantomData, pin::Pin, rc::Rc, sync::Arc};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -134,12 +134,16 @@ pub trait ForegroundExecutor {
 
 /// Executor using [`slint`]'s event loop.
 #[derive(Debug, Clone)]
-pub struct SlintExecutor(());
+pub struct SlintExecutor {
+    _marker: PhantomData<Rc<()>>,
+}
 
 impl SlintExecutor {
     /// Creates new slint executor.
     pub fn new() -> Self {
-        Self(())
+        Self {
+            _marker: PhantomData,
+        }
     }
 }
 
