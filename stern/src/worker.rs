@@ -52,6 +52,16 @@ impl<C> BackgroundExecutor<C> {
     pub fn context(&self) -> Arc<C> {
         Arc::clone(&self.cx)
     }
+
+    /// Creates new [`BackgroundExecutorDropGuard`].
+    ///
+    /// Returned guard will shuts down the background worker thread on drop.
+    #[must_use = "returned guard need to be hold"]
+    pub fn drop_guard(&self) -> BackgroundExecutorDropGuard {
+        BackgroundExecutorDropGuard {
+            _guard: self.cancel_tok.clone().drop_guard(),
+        }
+    }
 }
 
 impl<C> BackgroundExecutor<C>
@@ -109,8 +119,10 @@ where
     }
 }
 
-pub trait ForegroundExecutor {
-    type SpawnedHandle<T>;
+/// Shuts down background worker thread on drop.
+pub struct BackgroundExecutorDropGuard {
+    _guard: tokio_util::sync::DropGuard,
+}
 
 pub trait ForegroundExecutor {
     type SpawnedHandle;
