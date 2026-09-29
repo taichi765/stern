@@ -164,19 +164,19 @@ impl ForegroundExecutor for SlintExecutor {
     }
 }
 
-/// Foreground executor backed by [`smol::LocalExecutor`].
+/// Foreground executor backed by [`async_executor::LocalExecutor`].
 ///
 /// This executor is designed to emulate [`slint::spawn_local()`].
 #[derive(Debug, Clone)]
 pub struct SmolExecutor {
     cancel_tok: CancellationToken,
-    ex: Rc<smol::LocalExecutor<'static>>,
-    spawned_tasks: Rc<RefCell<Vec<smol::Task<()>>>>,
+    ex: Rc<async_executor::LocalExecutor<'static>>,
+    spawned_tasks: Rc<RefCell<Vec<async_task::Task<()>>>>,
 }
 
 impl SmolExecutor {
     pub fn new() -> Self {
-        let ex = Rc::new(smol::LocalExecutor::new());
+        let ex = Rc::new(async_executor::LocalExecutor::new());
         let cancel_tok = CancellationToken::new();
         Self {
             cancel_tok,
@@ -187,7 +187,7 @@ impl SmolExecutor {
 
     /// Starts foreground worker like [`slint::run_event_loop()`].
     pub fn start(&self) {
-        smol::block_on(async {
+        async_io::block_on(async {
             loop {
                 let handle_tick = async || {
                     let idx = self
@@ -218,9 +218,9 @@ impl SmolExecutor {
 impl ForegroundExecutor for SmolExecutor {
     type SpawnedHandle = ();
 
-    /// Spawns future using [`smol::Executor::spawn()`].
+    /// Spawns future using [`async_executor::LocalExecutor::spawn()`].
     ///
-    /// The function does not return [`smol::Task`] but `()`.
+    /// The function does not return [`async_task::Task`] but `()`.
     ///
     /// [`Task::detach()`] is called inside the function because if the caller does not keep
     /// the returned value alive, spawned task is cancelled.
@@ -228,7 +228,7 @@ impl ForegroundExecutor for SmolExecutor {
     /// The caller does not know whether the actual executor is [`SlintExecutor`] or [`SmolExecutor`] and so
     /// returned value need to be kept alive or not.
     ///
-    /// [`Task::detach()`]: smol::Task::detach
+    /// [`Task::detach()`]: async_task::Task::detach
     fn spawn<Fut>(&self, fut: Fut) -> Self::SpawnedHandle
     where
         Fut: Future<Output = ()> + 'static,

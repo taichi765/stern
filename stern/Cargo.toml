@@ -16,7 +16,9 @@ tokio = { workspace = true, features = ["sync", "rt-multi-thread", "macros"] }
 tokio-util = { workspace = true }
 parking_lot = { workspace = true }
 derive_more = { workspace = true, features = ["debug"] }
-smol = { workspace = true }
+async-io = { workspace = true, features = ["tracing"] }
+async-task = { workspace = true }
+async-executor = { workspace = true }
 
 [dev-dependencies]
 tokio-stream = { workspace = true, features = ["sync"] }

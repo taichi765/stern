@@ -26,3 +26,11 @@ heck = "0.5.0"
 tempfile = "3"
 smol = "2.0.2"
 trybuild = "1.0"
+
+async-io = "2.6.0"
+async-executor = "1.14.0"
+async-task = "4.7.1"
+
+[patch."https://github.com/taichi765/slint"]
+slint = { path = "../slint/api/rs/slint" }
+i-slint-backend-testing = { path = "../slint/internal/backends/testing" }
