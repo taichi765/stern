@@ -3,6 +3,21 @@ name = "stern"
 version.workspace = true
 edition.workspace = true
 
+# Tests for SlintExecutor. i_slint_backend_testing requires to be ran on separate process
+# since it uses static variable.
+
+[[test]]
+path = "tests/slint_executor/panics_with_tokio.rs"
+name = "slint_executor_panics_with_tokio"
+
+[[test]]
+path = "tests/slint_executor/simple.rs"
+name = "slint_executor_simple"
+
+[[test]]
+path = "tests/slint_executor/propagates_panic.rs"
+name = "slint_executor_propagates_panic"
+
 [dependencies]
 stern-macros = { workspace = true }
 

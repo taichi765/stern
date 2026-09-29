@@ -1,18 +1,16 @@
-use stern::WorkerThread;
+use stern::worker::{ForegroundExecutor as _, SlintExecutor};
 use tokio::sync::oneshot;
 
 #[test]
 fn slint_spawn_local_works_fine() {
     i_slint_backend_testing::init_integration_test_with_mock_time();
-    let worker = WorkerThread::new(());
+    let ex = SlintExecutor::new();
     let (tx, rx) = oneshot::channel();
 
-    worker.spawn_local({
-        let worker = worker.clone();
+    ex.spawn({
         async move {
             let msg = rx.await.unwrap();
             assert_eq!(msg, "Violets are blue");
-            worker.background_executor().shutdown();
             slint::quit_event_loop().unwrap();
         }
     });
