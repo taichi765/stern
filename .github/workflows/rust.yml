@@ -19,5 +19,9 @@ jobs:
     - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16
     - name: Run checks
       run: cargo check --verbose --all-targets
+    - name: Run stern's trybuild tests
+      # error message defer depending on whether rust-src component is installed.
+      # the difference is not important in the case, so we ignore it here.
+      run: TRYBUILD=overwrite cargo test -p stern --test *trybuild* --verbose
     - name: Run tests
       run: cargo test --verbose
