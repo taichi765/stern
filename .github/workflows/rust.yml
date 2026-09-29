@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - name: Install fontconfig for slint
-      run: apt-get update && apt-get install -y libfontconfig1-dev
+      run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev
     - name: Run checks
       run: cargo check --verbose --all-targets
     - name: Run tests
