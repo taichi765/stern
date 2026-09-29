@@ -23,14 +23,19 @@ stern-macros = { workspace = true }
 
 slint = { workspace = true }
 
+# utilities
 thiserror = { workspace = true }
-futures-util = { workspace = true }
-tracing = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
-tokio = { workspace = true, features = ["sync", "rt-multi-thread", "macros"] }
-tokio-util = { workspace = true }
 parking_lot = { workspace = true }
 derive_more = { workspace = true, features = ["debug"] }
+
+# async libraries
+futures-util = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["sync", "rt-multi-thread", "macros"] }
+tokio-util = { workspace = true }
+
+# smol family
 async-io = { workspace = true, features = ["tracing"] }
 async-task = { workspace = true }
 async-executor = { workspace = true }
