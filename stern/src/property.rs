@@ -158,7 +158,7 @@ mod tests {
     // TODO: Add run_current() method on WorkerThread
     #[test]
     fn property_handle_bind_returns_err_when_stream_ends() {
-        let worker = WorkerThread::new_smol(());
+        let ex = SmolExecutor::new();
         let val = Rc::new(Cell::new(0));
         let prop = PropertyHandle::new({
             let val = Rc::clone(&val);
@@ -169,27 +169,32 @@ mod tests {
 
         let (tx, rx) = watch::channel(0);
         let (quit_tx, quit_rx) = oneshot::channel();
-        worker.spawn_local(async move {
+        ex.spawn(async move {
             prop.watch(WatchStream::new(rx).fuse())
                 .await
                 .expect_err("should return error");
         });
-        worker.spawn_local({
+        ex.spawn({
             let worker = worker.clone();
             async move {
                 quit_rx.await.unwrap();
                 worker.shutdown_all();
             }
         });
-        worker.spawn_local(async move {
+        ex.spawn(async move {
             tx.send(1).unwrap();
+            // adding await point here enables `PropertyHandle::watch()` to
+            // handle the value sent just above.
+            // TODO: replace Timer with a function like kotlin's `runCurrent()`.
+            async_io::Timer::after(Duration::from_secs(1)).await;
             assert_eq!(val.get(), 1);
 
             tx.send(2).unwrap();
+            async_io::Timer::after(Duration::from_secs(1)).await;
             assert_eq!(val.get(), 2);
 
             quit_tx.send(()).unwrap();
         });
-        worker.foreground_executor().start();
+        ex.start();
     }
 }
