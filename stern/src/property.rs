@@ -145,14 +145,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        WorkerThread,
-        worker::{ForegroundExecutor, SmolExecutor},
-    };
+    use crate::worker::{ForegroundExecutor, SmolExecutor};
 
     use super::*;
     use std::{cell::Cell, time::Duration};
-    use tokio::sync::{oneshot, watch};
+    use tokio::sync::watch;
     use tokio_stream::wrappers::WatchStream;
 
     // TODO: Add run_current() method on WorkerThread
@@ -168,32 +165,26 @@ mod tests {
         });
 
         let (tx, rx) = watch::channel(0);
-        let (quit_tx, quit_rx) = oneshot::channel();
         ex.spawn(async move {
             prop.watch(WatchStream::new(rx).fuse())
                 .await
                 .expect_err("should return error");
         });
         ex.spawn({
-            let worker = worker.clone();
+            let ex = ex.clone();
             async move {
-                quit_rx.await.unwrap();
-                worker.shutdown_all();
+                tx.send(1).unwrap();
+                // adding await point here enables `PropertyHandle::watch()` to
+                // handle the value sent just above.
+                // TODO: replace Timer with a function like kotlin's `runCurrent()`.
+                async_io::Timer::after(Duration::from_secs(1)).await;
+                assert_eq!(val.get(), 1);
+
+                tx.send(2).unwrap();
+                async_io::Timer::after(Duration::from_secs(1)).await;
+                assert_eq!(val.get(), 2);
+                ex.stop();
             }
-        });
-        ex.spawn(async move {
-            tx.send(1).unwrap();
-            // adding await point here enables `PropertyHandle::watch()` to
-            // handle the value sent just above.
-            // TODO: replace Timer with a function like kotlin's `runCurrent()`.
-            async_io::Timer::after(Duration::from_secs(1)).await;
-            assert_eq!(val.get(), 1);
-
-            tx.send(2).unwrap();
-            async_io::Timer::after(Duration::from_secs(1)).await;
-            assert_eq!(val.get(), 2);
-
-            quit_tx.send(()).unwrap();
         });
         ex.start();
     }

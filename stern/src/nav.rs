@@ -244,22 +244,87 @@ where
 
 #[cfg(test)]
 mod tests {
-    //use crate::presentation::start::StartScreenDestination;
+    use super::*;
+    use std::assert_matches;
 
-    // use super::*;
+    #[derive(Debug, strum::EnumDiscriminants)]
+    #[strum_discriminants(name(RouteKind), derive(strum::EnumIter, Hash))]
+    enum Route {
+        Home,
+        #[allow(dead_code)]
+        User(String),
+    }
+
+    enum SlintRoute {
+        Home,
+        User,
+    }
+
+    impl RouteEnum for Route {
+        type Kind = RouteKind;
+        type SlintKind = SlintRoute;
+    }
+
+    impl From<RouteKind> for SlintRoute {
+        fn from(value: RouteKind) -> Self {
+            match value {
+                RouteKind::Home => Self::Home,
+                RouteKind::User => Self::User,
+            }
+        }
+    }
+
+    struct HomeDestination(());
+
+    impl NavDestination<Route> for HomeDestination {
+        fn load(&mut self, _route: &Route) {
+            unimplemented!()
+        }
+
+        fn route(&self) -> RouteKind {
+            RouteKind::Home
+        }
+    }
+
+    struct UserDestination(());
+
+    impl NavDestination<Route> for UserDestination {
+        fn load(&mut self, _route: &Route) {
+            unimplemented!()
+        }
+
+        fn route(&self) -> <Route as RouteEnum>::Kind {
+            RouteKind::User
+        }
+    }
 
     #[test]
     fn navhost_builder_returns_err_when_not_all_routes_registered() {
-        todo!()
-        /*let nav_controller = NavController::new(ui::NavRoute::Start, |route| {
-            println!("dummy");
+        let route_prop = Rc::new(RefCell::new(SlintRoute::Home));
+        let nc = NavController::new(Route::Home, {
+            let route_prop = Rc::clone(&route_prop);
+            move |v| *route_prop.borrow_mut() = v
         });
-        let application =
-        NavHost::builder(nav_controller).register(StartScreenDestination::new(application));*/
+        let err = NavHost::builder(nc)
+            .register(HomeDestination(()))
+            .finish()
+            .expect_err("should return error");
+        assert_matches!(err, NavHostBuilderError::NotAllRoutesRegistered(_));
     }
 
     #[test]
     fn navhost_builder_returns_err_when_registerations_are_duplicated() {
-        todo!()
+        let route_prop = Rc::new(RefCell::new(SlintRoute::Home));
+        let nc = NavController::new(Route::Home, {
+            let route_prop = Rc::clone(&route_prop);
+            move |v| *route_prop.borrow_mut() = v
+        });
+        let err = NavHost::builder(nc)
+            .register(HomeDestination(()))
+            .register(UserDestination(()))
+            .register(UserDestination(()))
+            .finish()
+            .expect_err("should return error");
+        assert_matches!(err, NavHostBuilderError::DuplicatedRegisteration(_));
     }
 }
