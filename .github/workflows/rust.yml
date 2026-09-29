@@ -16,6 +16,7 @@ jobs:
     - uses: actions/checkout@v7
     - name: Install fontconfig for slint
       run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev
+    - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16
     - name: Run checks
       run: cargo check --verbose --all-targets
     - name: Run tests
