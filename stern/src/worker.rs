@@ -1,4 +1,6 @@
-use std::{cell::RefCell, marker::PhantomData, pin::Pin, rc::Rc, sync::Arc};
+use std::{
+    cell::RefCell, marker::PhantomData, pin::Pin, rc::Rc, sync::Arc, task::Poll, time::Duration,
+};
 
 use futures_util::FutureExt;
 use tokio::sync::{mpsc, oneshot};
@@ -221,6 +223,10 @@ impl SmolExecutor {
     /// Stops foreground worker like [`slint::quit_event_loop()`].
     pub fn stop(&self) {
         self.cancel_tok.cancel();
+    }
+
+    pub fn after(&self, duration: Duration) -> async_io::Timer {
+        async_io::Timer::after(duration)
     }
 }
 
