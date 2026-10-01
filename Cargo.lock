@@ -309,7 +309,6 @@ dependencies = [
  "polling",
  "rustix 1.1.4",
  "slab",
- "tracing",
  "windows-sys 0.61.2",
 ]
 

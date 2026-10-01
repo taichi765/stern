@@ -1,6 +1,7 @@
 use std::{cell::RefCell, marker::PhantomData, pin::Pin, rc::Rc, sync::Arc};
 
-use tokio::sync::mpsc;
+use futures_util::FutureExt;
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
@@ -176,7 +177,7 @@ impl ForegroundExecutor for SlintExecutor {
 pub struct SmolExecutor {
     cancel_tok: CancellationToken,
     ex: Rc<async_executor::LocalExecutor<'static>>,
-    spawned_tasks: Rc<RefCell<Vec<async_task::Task<()>>>>,
+    spawned_tasks: Rc<RefCell<Vec<SmolTask>>>,
 }
 
 impl SmolExecutor {
@@ -200,10 +201,13 @@ impl SmolExecutor {
                         .borrow()
                         .iter()
                         .enumerate()
-                        .find_map(|(idx, t)| t.is_finished().then_some(idx));
+                        .find_map(|(idx, t)| t.0.is_finished().then_some(idx));
                     if let Some(idx) = idx {
                         let task = self.spawned_tasks.borrow_mut().remove(idx);
-                        task.await
+                        task.0.await;
+                        // notify to `SmolTaskHandle` that the task finished.
+                        // ignore `Err` when the handle is already dropped.
+                        let _ = task.1.send(());
                     }
                 };
                 tokio::select! {
@@ -221,7 +225,7 @@ impl SmolExecutor {
 }
 
 impl ForegroundExecutor for SmolExecutor {
-    type SpawnedHandle = ();
+    type SpawnedHandle = SmolTaskHandle;
 
     /// Spawns future using [`async_executor::LocalExecutor::spawn()`].
     ///
@@ -239,7 +243,28 @@ impl ForegroundExecutor for SmolExecutor {
         Fut: Future<Output = ()> + 'static,
     {
         let task = self.ex.spawn(fut);
-        self.spawned_tasks.borrow_mut().push(task);
+        let (tx, rx) = oneshot::channel();
+        self.spawned_tasks.borrow_mut().push(SmolTask(task, tx));
+        SmolTaskHandle(rx)
+    }
+}
+
+#[derive(Debug)]
+struct SmolTask(async_task::Task<()>, oneshot::Sender<()>);
+
+pub struct SmolTaskHandle(oneshot::Receiver<()>);
+
+impl Future for SmolTaskHandle {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        match self.0.poll_unpin(cx) {
+            Poll::Ready(Ok(_)) => Poll::Ready(()),
+            Poll::Ready(Err(e)) => {
+                panic!("foreground executor unexpectedly closed channel: {}", e)
+            }
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 
