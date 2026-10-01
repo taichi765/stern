@@ -3,6 +3,8 @@ use std::{cell::RefCell, fmt::Debug, rc::Rc};
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 
+use crate::{WorkerThread, worker::ForegroundExecutor};
+
 /// A handle to slint's property.
 ///
 /// `T` is a domain type (e.g. [`String`] or [`u32`]) and `U` is a slint type (e.g. [`slint::SharedString`] or [`i32`]).
@@ -101,17 +103,19 @@ where
         }
     }
 
-    /// Run [`PropertyHandle::bind()`] in the slint event loop using [`slint::spawn_local()`].
+    /// Run [`PropertyHandle::bind()`] in the slint event loop using [`WorkerThread::spawn_local()`].
     ///
     /// Returns handle to the spawned task.
-    pub fn bind<S>(self, input_stream: S) -> CancellationToken
+    pub fn bind<S, C, E>(self, worker: &WorkerThread<C, E>, input_stream: S) -> CancellationToken
     where
         S: FusedStream<Item = T> + Unpin + 'static,
         T: 'static,
         U: 'static,
+        C: Sync + Send + 'static,
+        E: ForegroundExecutor,
     {
         let tok = CancellationToken::new();
-        let _join = slint::spawn_local({
+        let _join = worker.spawn_local({
             let tok = tok.clone();
             async move {
                 tokio::select! {
@@ -121,8 +125,7 @@ where
                     _ = self.watch(input_stream) => (),
                 }
             }
-        })
-        .unwrap();
+        });
         tok
     }
 }
