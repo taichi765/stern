@@ -14,7 +14,7 @@ use std::{
 };
 use strum::IntoEnumIterator;
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, trace};
 
 /// Watches [`NavController`] and prepares `ViewModel`s before navigating to the route.
 ///
@@ -171,8 +171,8 @@ where
     }
 
     /// Moves back to the previous route.
-    pub fn move_back(&self) {
-        self.0.borrow_mut().move_back();
+    pub fn move_back(&self) -> Option<R> {
+        self.0.borrow_mut().move_back()
     }
 
     fn subscribe_on_navigate<F>(&self, f: F)
@@ -251,11 +251,23 @@ where
         (self.route_property_setter)(ui_route);
     }
 
-    fn move_back(&mut self) {
+    fn move_back(&mut self) -> Option<R> {
+        trace!("moving back");
         let prev = self.route_stack.pop_back();
-        if let Some(prev) = prev {
-            self.navigate(prev);
+
+        let Some(prev) = dbg!(prev) else {
+            return None;
+        };
+
+        if let Some(on_navigate) = &mut self.on_navigate {
+            (on_navigate.as_mut())(&prev);
         }
+
+        let current = std::mem::replace(&mut self.current, prev);
+        let kind: R::Kind = R::Kind::from(&self.current);
+        let ui_route: R::SlintKind = kind.into();
+        (self.route_property_setter)(ui_route);
+        Some(dbg!(current))
     }
 
     fn subscribe_on_navigate<F>(&mut self, f: F)
@@ -271,55 +283,57 @@ mod tests {
     use super::*;
     use std::assert_matches;
 
-    #[derive(Debug, strum::EnumDiscriminants)]
-    #[strum_discriminants(name(RouteKind), derive(strum::EnumIter, Hash))]
-    enum Route {
-        Home,
-        #[allow(dead_code)]
-        User(String),
-    }
-
-    enum SlintRoute {
-        Home,
-        User,
-    }
-
-    impl RouteEnum for Route {
-        type Kind = RouteKind;
-        type SlintKind = SlintRoute;
-    }
-
-    impl From<RouteKind> for SlintRoute {
-        fn from(value: RouteKind) -> Self {
-            match value {
-                RouteKind::Home => Self::Home,
-                RouteKind::User => Self::User,
+    macro_rules! define_routes {
+        ($($route:ident$(($typ:ty))?,)*) => {
+            #[derive(Debug, strum::EnumDiscriminants)]
+            #[strum_discriminants(name(RouteKind), derive(strum::EnumIter, Hash))]
+            enum Route {
+                $(
+                    #[allow(dead_code)]
+                    $route$(($typ))?,
+                )*
             }
-        }
+
+            #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+            enum SlintRoute {
+                $($route,)*
+            }
+
+            impl RouteEnum for Route {
+                type Kind = RouteKind;
+                type SlintKind = SlintRoute;
+            }
+
+            impl From<RouteKind> for SlintRoute {
+                fn from(value: RouteKind) -> Self {
+                    match value {
+                        $(RouteKind::$route => Self::$route,)*
+                    }
+                }
+            }
+
+            pastey::paste!{
+                $(
+                    struct [<$route Destination>](());
+
+                    impl NavDestination<Route> for [<$route Destination>] {
+                        fn load(&mut self, _route: &Route) {
+                            unimplemented!();
+                        }
+
+                        fn route(&self) -> RouteKind {
+                            RouteKind::$route
+                        }
+                    }
+                )*
+            }
+        };
     }
 
-    struct HomeDestination(());
-
-    impl NavDestination<Route> for HomeDestination {
-        fn load(&mut self, _route: &Route) {
-            unimplemented!()
-        }
-
-        fn route(&self) -> RouteKind {
-            RouteKind::Home
-        }
-    }
-
-    struct UserDestination(());
-
-    impl NavDestination<Route> for UserDestination {
-        fn load(&mut self, _route: &Route) {
-            unimplemented!()
-        }
-
-        fn route(&self) -> <Route as RouteEnum>::Kind {
-            RouteKind::User
-        }
+    define_routes! {
+        Home,
+        User(String),
+        Auth,
     }
 
     #[test]
@@ -331,6 +345,7 @@ mod tests {
         });
         let err = NavHost::builder(nc)
             .register(HomeDestination(()))
+            .register(AuthDestination(()))
             .finish()
             .expect_err("should return error");
         assert_matches!(err, NavHostBuilderError::NotAllRoutesRegistered(_));
@@ -350,5 +365,32 @@ mod tests {
             .finish()
             .expect_err("should return error");
         assert_matches!(err, NavHostBuilderError::DuplicatedRegisteration(_));
+    }
+
+    #[test]
+    fn move_back_works_properly() {
+        let route_prop = Rc::new(RefCell::new(SlintRoute::Home));
+        let nc = NavController::new(Route::Home, {
+            let route_prop = Rc::clone(&route_prop);
+            move |v| *route_prop.borrow_mut() = v
+        });
+
+        let prev = nc.move_back();
+        assert!(prev.is_none());
+
+        nc.navigate(Route::Home);
+        nc.navigate(Route::User("Bob".to_string()));
+        nc.navigate(Route::Auth);
+
+        let prev = nc.move_back();
+        assert_matches!(prev, Some(Route::Auth));
+        assert_eq!(*route_prop.borrow(), SlintRoute::User);
+
+        let prev = nc.move_back();
+        assert_matches!(prev, Some(Route::User(_)));
+        assert_eq!(*route_prop.borrow(), SlintRoute::Home);
+
+        let prev = nc.move_back();
+        assert_matches!(prev, Some(Route::Home));
     }
 }
