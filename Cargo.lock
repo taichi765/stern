@@ -4103,6 +4103,7 @@ dependencies = [
  "futures-util",
  "i-slint-backend-testing",
  "parking_lot",
+ "pastey",
  "slint",
  "stern-macros",
  "strum",
