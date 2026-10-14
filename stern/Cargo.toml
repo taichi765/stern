@@ -45,3 +45,4 @@ tokio-stream = { workspace = true, features = ["sync"] }
 i-slint-backend-testing = { workspace = true }
 trybuild = { workspace = true }
 tracing-subscriber = { workspace = true }
+pastey = { workspace = true }
