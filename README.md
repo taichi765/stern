@@ -6,4 +6,6 @@ Slint is an open-source declarative GUI toolkit to build native user interfaces 
 This framework provides useful APIs to develop Slint app, for instance, [Jetpack Navigation 3](https://developer.android.com/guide/navigation)-like navigation API.
 
 ## Examples
-TODO
+Real-world example can be fount at https://github.com/TK75Attractions/struckout/tree/master/touchpanel.
+
+TODO: Add simple example
