@@ -16,7 +16,7 @@ jobs:
     - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
     - name: Install fontconfig for slint
       run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev
-    - uses: Swatinem/rust-cache@f4371d1ec7179bfbd04a82a81e3b3af7f720750f
+    - uses: Swatinem/rust-cache@eedcf2fb1c22f010a0eb66b92f378c110977f266
     - name: Run checks
       run: cargo check --verbose --all-targets
     - name: Run stern's trybuild tests
